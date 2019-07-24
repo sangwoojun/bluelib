@@ -4,10 +4,19 @@ import Vector::*;
 import FIFO::*;
 import FloatingPoint::*;
 
+
+import "BDPI" function Bit#(32) bdpi_sqrt32(Bit#(32) data);
+
 typedef 7 MultLatency32;
 typedef 12 AddLatency32;
 typedef 12 SubLatency32;
 typedef 29 DivLatency32;
+typedef 29 SqrtLatency32;
+
+interface FpFilterImportIfc#(numeric type width);
+	method Action enq(Bit#(width) a);
+	method ActionValue#(Bit#(width)) get;
+endinterface
 
 interface FpPairImportIfc#(numeric type width);
 	method Action enqa(Bit#(width) a);
@@ -15,12 +24,13 @@ interface FpPairImportIfc#(numeric type width);
 	method ActionValue#(Bit#(width)) get;
 endinterface
 
-interface FpPairImportIfc32;
-	method Action enqa(Bit#(32) a);
-	method Action enqb(Bit#(32) b);
-	method ActionValue#(Bit#(32)) get;
-endinterface
 
+
+interface FpFilterIfc#(numeric type width);
+	method Action enq(Bit#(width) a);
+	method Action deq;
+	method Bit#(width) first;
+endinterface
 interface FpPairIfc#(numeric type width);
 	method Action enq(Bit#(width) a, Bit#(width) b);
 	method Action deq;
@@ -95,6 +105,21 @@ module mkFpDivImport32#(Clock aclk, Reset arst) (FpPairImportIfc#(32));
 		get, enqa, enqb
 	);
 endmodule
+import "BVI" fp_sqrt32 =
+module mkFpSqrtImport32#(Clock aclk, Reset arst) (FpFilterImportIfc#(32));
+	default_clock no_clock;
+	default_reset no_reset;
+
+	input_clock (aclk) = aclk;
+	method m_axis_result_tdata get enable(m_axis_result_tready) ready(m_axis_result_tvalid) clocked_by(aclk);
+	method enq(s_axis_a_tdata) enable(s_axis_a_tvalid) ready(s_axis_a_tready) clocked_by(aclk);
+  
+	schedule (
+		get, enq
+	) CF (
+		get, enq
+	);
+endmodule
 
 module mkFpSub32 (FpPairIfc#(32));
 	Clock curClk <- exposeCurrentClock;
@@ -125,7 +150,7 @@ module mkFpSub32 (FpPairIfc#(32));
 	method Action enq(Bit#(32) a, Bit#(32) b);
 `ifdef BSIM
 	Bool asign = a[31] == 1;
-	Bool bsign = a[31] == 1;
+	Bool bsign = b[31] == 1;
 	Bit#(8) ae = truncate(a>>23);
 	Bit#(8) be = truncate(b>>23);
 	Bit#(23) as = truncate(a);
@@ -178,7 +203,7 @@ module mkFpAdd32 (FpPairIfc#(32));
 	method Action enq(Bit#(32) a, Bit#(32) b);
 `ifdef BSIM
 	Bool asign = a[31] == 1;
-	Bool bsign = a[31] == 1;
+	Bool bsign = b[31] == 1;
 	Bit#(8) ae = truncate(a>>23);
 	Bit#(8) be = truncate(b>>23);
 	Bit#(23) as = truncate(a);
@@ -231,7 +256,7 @@ module mkFpMult32 (FpPairIfc#(32));
 	method Action enq(Bit#(32) a, Bit#(32) b);
 `ifdef BSIM
 	Bool asign = a[31] == 1;
-	Bool bsign = a[31] == 1;
+	Bool bsign = b[31] == 1;
 	Bit#(8) ae = truncate(a>>23);
 	Bit#(8) be = truncate(b>>23);
 	Bit#(23) as = truncate(a);
@@ -260,15 +285,15 @@ module mkFpDiv32 (FpPairIfc#(32));
 
 	FIFO#(Bit#(32)) outQ <- mkFIFO;
 `ifdef BSIM
-	Vector#(MultLatency32, FIFO#(Bit#(32))) latencyQs <- replicateM(mkFIFO);
-	for (Integer i = 0; i < valueOf(MultLatency32)-1; i=i+1 ) begin
+	Vector#(DivLatency32, FIFO#(Bit#(32))) latencyQs <- replicateM(mkFIFO);
+	for (Integer i = 0; i < valueOf(DivLatency32)-1; i=i+1 ) begin
 		rule relay;
 			latencyQs[i].deq;
 			latencyQs[i+1].enq(latencyQs[i].first);
 		endrule
 	end
 	rule relayOut;
-		Integer lastIdx = valueOf(MultLatency32)-1;
+		Integer lastIdx = valueOf(DivLatency32)-1;
 		latencyQs[lastIdx].deq;
 		outQ.enq(latencyQs[lastIdx].first);
 	endrule
@@ -283,7 +308,7 @@ module mkFpDiv32 (FpPairIfc#(32));
 	method Action enq(Bit#(32) a, Bit#(32) b);
 `ifdef BSIM
 	Bool asign = a[31] == 1;
-	Bool bsign = a[31] == 1;
+	Bool bsign = b[31] == 1;
 	Bit#(8) ae = truncate(a>>23);
 	Bit#(8) be = truncate(b>>23);
 	Bit#(23) as = truncate(a);
@@ -306,5 +331,45 @@ module mkFpDiv32 (FpPairIfc#(32));
 	endmethod
 endmodule
 
+module mkFpSqrt32 (FpFilterIfc#(32));
+	Clock curClk <- exposeCurrentClock;
+	Reset curRst <- exposeCurrentReset;
+
+	FIFO#(Bit#(32)) outQ <- mkFIFO;
+`ifdef BSIM
+	Vector#(SqrtLatency32, FIFO#(Bit#(32))) latencyQs <- replicateM(mkFIFO);
+	for (Integer i = 0; i < valueOf(SqrtLatency32)-1; i=i+1 ) begin
+		rule relay;
+			latencyQs[i].deq;
+			latencyQs[i+1].enq(latencyQs[i].first);
+		endrule
+	end
+	rule relayOut;
+		Integer lastIdx = valueOf(SqrtLatency32)-1;
+		latencyQs[lastIdx].deq;
+		outQ.enq(latencyQs[lastIdx].first);
+	endrule
+`else
+	FpPairImportIfc#(32) fp_sqrt <- mkFpSqrtImport32(curClk, curRst);
+	rule getOut;
+		let v <- fp_sqrt.get;
+		outQ.enq(v);
+	endrule
+`endif
+
+	method Action enq(Bit#(32) a);
+`ifdef BSIM
+	latencyQs[0].enq( bdpi_sqrt32(a) );
+`else
+		fp_sqrt.enq(a);
+`endif
+	endmethod
+	method Action deq;
+		outQ.deq;
+	endmethod
+	method Bit#(32) first;
+		return outQ.first;
+	endmethod
+endmodule
 
 endpackage: Float32

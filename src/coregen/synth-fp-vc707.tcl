@@ -1,5 +1,5 @@
 proc genFPCore {corename propertyList} {
-	set coredir "./core"
+	set coredir "./vc707"
 	file mkdir $coredir
 	if [file exists ./$coredir/$corename] {
 		file delete -force ./$coredir/$corename

@@ -5,10 +5,13 @@ import FIFO::*;
 import FloatingPoint::*;
 import Float32::*;
 
+import "BDPI" function Bit#(64) bdpi_sqrt64(Bit#(64) data);
+
 typedef 16 MultLatency64;
 typedef 15 AddLatency64;
 typedef 15 SubLatency64;
 typedef 58 DivLatency64;
+typedef 58 SqrtLatency64;
 
 
 
@@ -93,6 +96,21 @@ module mkFpDivImport64#(Clock aclk, Reset arst) (FpPairImportIfc#(64));
 		get, enqa, enqb
 	);
 endmodule
+import "BVI" fp_sqrt64 =
+module mkFpSqrtImport64#(Clock aclk, Reset arst) (FpFilterImportIfc#(64));
+	default_clock no_clock;
+	default_reset no_reset;
+
+	input_clock (aclk) = aclk;
+	method m_axis_result_tdata get enable(m_axis_result_tready) ready(m_axis_result_tvalid) clocked_by(aclk);
+	method enq(s_axis_a_tdata) enable(s_axis_a_tvalid) ready(s_axis_a_tready) clocked_by(aclk);
+  
+	schedule (
+		get, enq
+	) CF (
+		get, enq
+	);
+endmodule
 
 module mkFpSub64 (FpPairIfc#(64));
 	Clock curClk <- exposeCurrentClock;
@@ -123,7 +141,7 @@ module mkFpSub64 (FpPairIfc#(64));
 	method Action enq(Bit#(64) a, Bit#(64) b);
 `ifdef BSIM
 	Bool asign = a[63] == 1;
-	Bool bsign = a[63] == 1;
+	Bool bsign = b[63] == 1;
 	Bit#(11) ae = truncate(a>>52);
 	Bit#(11) be = truncate(b>>52);
 	Bit#(52) as = truncate(a);
@@ -176,7 +194,7 @@ module mkFpAdd64 (FpPairIfc#(64));
 	method Action enq(Bit#(64) a, Bit#(64) b);
 `ifdef BSIM
 	Bool asign = a[63] == 1;
-	Bool bsign = a[63] == 1;
+	Bool bsign = b[63] == 1;
 	Bit#(11) ae = truncate(a>>52);
 	Bit#(11) be = truncate(b>>52);
 	Bit#(52) as = truncate(a);
@@ -229,7 +247,7 @@ module mkFpMult64 (FpPairIfc#(64));
 	method Action enq(Bit#(64) a, Bit#(64) b);
 `ifdef BSIM
 	Bool asign = a[63] == 1;
-	Bool bsign = a[63] == 1;
+	Bool bsign = b[63] == 1;
 	Bit#(11) ae = truncate(a>>52);
 	Bit#(11) be = truncate(b>>52);
 	Bit#(52) as = truncate(a);
@@ -261,15 +279,15 @@ module mkFpDiv64 (FpPairIfc#(64));
 
 	FIFO#(Bit#(64)) outQ <- mkFIFO;
 `ifdef BSIM
-	Vector#(MultLatency64, FIFO#(Bit#(64))) latencyQs <- replicateM(mkFIFO);
-	for (Integer i = 0; i < valueOf(MultLatency64)-1; i=i+1 ) begin
+	Vector#(DivLatency64, FIFO#(Bit#(64))) latencyQs <- replicateM(mkFIFO);
+	for (Integer i = 0; i < valueOf(DivLatency64)-1; i=i+1 ) begin
 		rule relay;
 			latencyQs[i].deq;
 			latencyQs[i+1].enq(latencyQs[i].first);
 		endrule
 	end
 	rule relayOut;
-		Integer lastIdx = valueOf(MultLatency64)-1;
+		Integer lastIdx = valueOf(DivLatency64)-1;
 		latencyQs[lastIdx].deq;
 		outQ.enq(latencyQs[lastIdx].first);
 	endrule
@@ -284,7 +302,7 @@ module mkFpDiv64 (FpPairIfc#(64));
 	method Action enq(Bit#(64) a, Bit#(64) b);
 `ifdef BSIM
 	Bool asign = a[63] == 1;
-	Bool bsign = a[63] == 1;
+	Bool bsign = b[63] == 1;
 	Bit#(11) ae = truncate(a>>52);
 	Bit#(11) be = truncate(b>>52);
 	Bit#(52) as = truncate(a);
@@ -297,6 +315,47 @@ module mkFpDiv64 (FpPairIfc#(64));
 `else
 		fp_div.enqa(a);
 		fp_div.enqb(b);
+`endif
+	endmethod
+	method Action deq;
+		outQ.deq;
+	endmethod
+	method Bit#(64) first;
+		return outQ.first;
+	endmethod
+endmodule
+
+module mkFpSqrt64 (FpFilterIfc#(64));
+	Clock curClk <- exposeCurrentClock;
+	Reset curRst <- exposeCurrentReset;
+
+	FIFO#(Bit#(64)) outQ <- mkFIFO;
+`ifdef BSIM
+	Vector#(SqrtLatency64, FIFO#(Bit#(64))) latencyQs <- replicateM(mkFIFO);
+	for (Integer i = 0; i < valueOf(SqrtLatency64)-1; i=i+1 ) begin
+		rule relay;
+			latencyQs[i].deq;
+			latencyQs[i+1].enq(latencyQs[i].first);
+		endrule
+	end
+	rule relayOut;
+		Integer lastIdx = valueOf(SqrtLatency64)-1;
+		latencyQs[lastIdx].deq;
+		outQ.enq(latencyQs[lastIdx].first);
+	endrule
+`else
+	FpPairImportIfc#(64) fp_sqrt <- mkFpSqrtImport64(curClk, curRst);
+	rule getOut;
+		let v <- fp_sqrt.get;
+		outQ.enq(v);
+	endrule
+`endif
+
+	method Action enq(Bit#(64) a);
+`ifdef BSIM
+	latencyQs[0].enq( bdpi_sqrt64(a) );
+`else
+		fp_sqrt.enq(a);
 `endif
 	endmethod
 	method Action deq;
