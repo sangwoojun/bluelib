@@ -344,7 +344,7 @@ module mkFpSqrt64 (FpFilterIfc#(64));
 		outQ.enq(latencyQs[lastIdx].first);
 	endrule
 `else
-	FpPairImportIfc#(64) fp_sqrt <- mkFpSqrtImport64(curClk, curRst);
+	FpFilterImportIfc#(64) fp_sqrt <- mkFpSqrtImport64(curClk, curRst);
 	rule getOut;
 		let v <- fp_sqrt.get;
 		outQ.enq(v);

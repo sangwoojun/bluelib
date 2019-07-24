@@ -350,7 +350,7 @@ module mkFpSqrt32 (FpFilterIfc#(32));
 		outQ.enq(latencyQs[lastIdx].first);
 	endrule
 `else
-	FpPairImportIfc#(32) fp_sqrt <- mkFpSqrtImport32(curClk, curRst);
+	FpFilterImportIfc#(32) fp_sqrt <- mkFpSqrtImport32(curClk, curRst);
 	rule getOut;
 		let v <- fp_sqrt.get;
 		outQ.enq(v);
