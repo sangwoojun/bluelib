@@ -22,4 +22,4 @@ proc genCordicCore {corename propertyList} {
 }
 
 genCordicCore "cordic_sincos" [list CONFIG.Component_Name {cordic_sincos} CONFIG.Functional_Selection {Sin_and_Cos} CONFIG.Round_Mode {Truncate} CONFIG.Data_Format {SignedFraction}]
-genCordicCore "cordic_atan" [list CONFIG.Component_Name {cordic_atan} CONFIG.Functional_Selection {Arc_Tan} CONFIG.Data_Format {SignedFraction}]
+genCordicCore "cordic_atan" [list CONFIG.Component_Name {cordic_atan} CONFIG.Functional_Selection {Arc_Tan} CONFIG.Data_Format {SignedFraction} CONFIG.flow_control {Blocking}]

@@ -2,6 +2,7 @@
 rm -rf kc705
 
 vivado -mode batch -source synth-fp-kc705.tcl -nolog -nojournal
+vivado -mode batch -source synth-cordic-kc705.tcl -nolog -nojournal
 
 #mv kc705/fp_add32/fp_add32.xci kc705/
 #mv kc705/fp_sub32/fp_sub32.xci kc705/
