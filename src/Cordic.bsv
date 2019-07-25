@@ -1,3 +1,10 @@
+/*
+WARNING: Due to fixed point representation limitations, SinCos takes input in radians, between ranges of -pi to +pi
+Similarly, Atan also takes input in the range of -1 to +1
+*/
+
+
+
 package Cordic;
 
 import Float32::*;
