@@ -9,6 +9,7 @@ package Cordic;
 
 import Float32::*;
 import FIFO::*;
+import Vector::*;
 
 import "BDPI" function Bit#(32) bdpi_sincos(Bit#(32) data);
 import "BDPI" function Bit#(32) bdpi_atan(Bit#(32) x, Bit#(32) y);
@@ -48,9 +49,9 @@ module mkCordicSinCosImport#(Clock aclk, Reset arst) (CordicSinCosImportIfc);
 	method enq(s_axis_phase_tdata) enable(s_axis_phase_tvalid) ready(s_axis_phase_tready) clocked_by(aclk);
 	
 	schedule (
-		get
+		get, enq
 	) CF (
-		enq
+		get, enq
 	);
 endmodule
 
@@ -65,9 +66,9 @@ module mkCordicAtanImport#(Clock aclk, Reset arst) (CordicAtanImportIfc);
 	method enq(s_axis_cartesian_tdata) enable(s_axis_cartesian_tvalid) ready(s_axis_cartesian_tready) clocked_by(aclk);
 	
 	schedule (
-		get
+		get, enq
 	) CF (
-		enq
+		get, enq
 	);
 endmodule
 
@@ -119,7 +120,7 @@ module mkCordicAtan (CordicAtanIfc);
 	FIFO#(Bit#(16)) outQ <- mkFIFO;
 
 `ifdef BSIM
-	Vector#(CordicLatency16, FIFO#(Bit#(32))) latencyQs <- replicateM(mkFIFO);
+	Vector#(CordicLatency16, FIFO#(Bit#(16))) latencyQs <- replicateM(mkFIFO);
 	for (Integer i = 0; i < valueOf(CordicLatency16)-1; i=i+1 ) begin
 		rule relay;
 			latencyQs[i].deq;
