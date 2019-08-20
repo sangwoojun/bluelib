@@ -49,7 +49,8 @@ endmodule
 module mkDeSerializer (DeSerializerIfc#(srcSz, multiplier))
 	provisos (
 		Mul#(srcSz, multiplier, dstSz),
-		Add#(a__, srcSz, dstSz)
+		Add#(a__, srcSz, dstSz),
+		Add#(b__, 2, multiplier)
 	);
 	FIFO#(Bit#(srcSz)) inQ <- mkFIFO;
 	FIFO#(Bit#(dstSz)) outQ <- mkFIFO;
@@ -58,16 +59,17 @@ module mkDeSerializer (DeSerializerIfc#(srcSz, multiplier))
 	Reg#(Bit#(TAdd#(1,TLog#(multiplier)))) bufIdx <- mkReg(0);
 
 	rule procin;
-		if ( bufIdx + 1 < fromInteger(valueOf(multiplier)) ) begin
+		Integer shiftup = (valueOf(multiplier)-1)*valueOf(srcSz);
+		if ( bufIdx + 2 <= fromInteger(valueOf(multiplier)) ) begin
 			let d = inQ.first;
 			inQ.deq;
 
-			buffer <= (buffer>>valueOf(srcSz)) | (zeroExtend(d)<<(valueOf(multiplier)-1) );
+			buffer <= (buffer>>valueOf(srcSz)) | (zeroExtend(d)<<(shiftup) );
 			bufIdx <= bufIdx + 1;
 		end else begin
 			let d = inQ.first;
 			inQ.deq;
-			Bit#(dstSz) td = (buffer>>valueOf(srcSz)) | (zeroExtend(d)<<(valueOf(multiplier)-1) );
+			Bit#(dstSz) td = (buffer>>valueOf(srcSz)) | (zeroExtend(d)<<(shiftup) );
 
 			buffer <= 0;
 			bufIdx <= 0;
