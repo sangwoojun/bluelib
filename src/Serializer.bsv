@@ -47,6 +47,38 @@ module mkSerializer (SerializerIfc#(srcSz, multiplier))
 	endmethod
 endmodule
 
+module mkStreamReplicate#(Integer framesize) (FIFO#(dtype))
+	provisos( Bits#(dtype, dtypeSz) );
+	staticAssert(framesize<256, "mkStreamReplicate framesize must be less than 256" );
+	staticAssert(framesize>0, "mkStreamReplicate framesize must be larger than 0" );
+	
+	Reg#(Bit#(8)) repIdx <- mkReg(0);
+	Reg#(dtype) buffer <- mkReg(?);
+	FIFO#(dtype) outQ <- mkFIFO;
+	FIFO#(dtype) inQ <- mkFIFO;
+
+
+	rule replicate;
+		if ( repIdx == 0 ) begin
+			repIdx <= fromInteger(framesize-1);
+
+			let d = inQ.first;
+			inQ.deq;
+
+			outQ.enq(d);
+			buffer <= d;
+		end else begin
+			repIdx <= repIdx - 1;
+			outQ.enq(buffer);
+		end
+	endrule
+
+	method enq = inQ.enq;
+	method deq = outQ.deq;
+	method first = outQ.first;
+	method clear = outQ.clear;
+endmodule
+
 module mkDeSerializer (DeSerializerIfc#(srcSz, multiplier))
 	provisos (
 		Mul#(srcSz, multiplier, dstSz),
