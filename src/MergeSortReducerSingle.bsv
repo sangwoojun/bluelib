@@ -39,10 +39,19 @@ module mkMergeSortReducerSingle (MergeSortReducerSingleIfc#(n,k,v))
 				midQ.enq(tuple3(tpl_1(d0), tpl_2(d0), False));
 				inQ[0].deq;
 				inDone[0] <= tpl_3(d0);
-			end else begin
+			end else if ( tpl_1(d0) > tpl_1(d1) ) begin
 				midQ.enq(tuple3(tpl_1(d1), tpl_2(d1), False));
 				inQ[1].deq;
 				inDone[1] <= tpl_3(d1);
+			end else begin
+				inQ[0].deq;
+				inQ[1].deq;
+				midQ.enq(tuple3(tpl_1(d1), tpl_2(d1)+tpl_2(d0), tpl_3(d1)&&tpl_3(d1)));
+
+				if ( !tpl_3(d0)||!tpl_3(d1) ) begin // else: if both are True, both streams are done and we start new
+					inDone[0] <= tpl_3(d0);
+					inDone[1] <= tpl_3(d1);
+				end
 			end
 		endrule
 		rule ff0 (inDone[0] == False && inDone[1] == True );

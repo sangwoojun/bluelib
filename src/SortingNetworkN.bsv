@@ -4,7 +4,7 @@ import Clocks::*;
 import Vector::*;
 	
 import SortingNetwork::*;
-	
+
 module mkSortingNetwork8#(Bool descending) (SortingNetworkIfc#(inType, 8))
 	provisos(
 	Bits#(Vector::Vector#(8, inType), inVSz),
