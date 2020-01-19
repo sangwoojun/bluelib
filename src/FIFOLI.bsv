@@ -9,13 +9,15 @@ package FIFOLI;
 import FIFO::*;
 import Vector::*;
 
-interface FIFOLI(type t, numeric type steps);
+interface FIFOLI#(type t, numeric type steps);
 	method Action enq(t d);
 	method t first;
 	method Action deq;
 endinterface
 
-module mkFIFOLI(FIFOLI#(t, steps));
+module mkFIFOLI(FIFOLI#(t, steps))
+	provisos(Bits#(t, tSz));
+
 	Vector#(steps,FIFO#(t)) fifos <- replicateM(mkFIFO);
 
 	for ( Integer i = 0; i < valueOf(steps)-1; i=i+1 ) begin

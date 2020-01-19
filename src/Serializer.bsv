@@ -1,7 +1,10 @@
 package Serializer;
 
 import FIFO::*;
+import SpecialFIFOs::*;
+import Vector::*;
 import Assert::*;
+import GetPut::*;
 
 interface SerializerIfc#(numeric type srcSz, numeric type multiplier);
 	method Action put(Bit#(srcSz) data);
@@ -179,4 +182,103 @@ module mkStreamSkip#(Integer framesize, Integer offset) (FIFO#(dtype))
 	method clear = outQ.clear;
 endmodule
 
+interface PipelineShiftIfc#(numeric type sz, numeric type shiftsz);
+   method Action put(Bit#(sz) v, Bit#(shiftsz) shift);
+   method ActionValue#(Bit#(sz)) get;
+endinterface
+
+module mkPipelineShiftRight(PipelineShiftIfc#(sz, shiftsz));
+   
+   Integer numStages =  valueOf(shiftsz);
+   
+   Vector#(shiftsz, FIFO#(Tuple2#(Bit#(sz), Bit#(shiftsz)))) stageFifos <- replicateM(mkFIFO);
+   
+   FIFO#(Bit#(sz)) outputFifo <- mkBypassFIFO;
+   
+   for (Integer i = numStages - 1; i >= 0; i = i - 1) begin
+      rule doStage;
+         let args <- toGet(stageFifos[i]).get();
+         let val = tpl_1(args);
+         let shift = tpl_2(args);
+         
+         if ( shift[i] == 1 ) begin
+            val = val >> (1<<i);
+         end
+         
+         if ( i > 0 ) begin
+            stageFifos[i-1].enq(tuple2(val,shift));
+         end
+         else begin
+            outputFifo.enq(val);
+         end
+      endrule
+   end
+      
+   method Action put(Bit#(sz) v, Bit#(shiftsz) shift);
+      stageFifos[numStages-1].enq(tuple2(v,shift));
+   endmethod
+   method ActionValue#(Bit#(sz)) get;
+      let v <- toGet(outputFifo).get();
+      return v;
+   endmethod
+endmodule
+
+
+interface SerializerFreeformIfc#(numeric type srcSz, numeric type dstSz);
+	method Action put(Bit#(srcSz) data);
+	method ActionValue#(Bit#(dstSz)) get;
+endinterface
+
+module mkSerializerFreeform(SerializerFreeformIfc#(srcSz, dstSz))
+	provisos (
+		Add#(a__, dstSz, srcSz),
+		Add#(b__, srcSz, TMul#(srcSz,2)),
+		Add#(c__, dstSz, TMul#(srcSz,2))
+	);
+	Integer idst = valueOf(dstSz);
+	Integer isrc = valueOf(srcSz);
+
+	FIFO#(Bit#(srcSz)) inQ <- mkFIFO;
+	FIFO#(Bit#(dstSz)) outQ <- mkFIFO;
+
+	Reg#(Bit#(srcSz)) buffer <- mkReg(0);
+	Reg#(Bit#(TAdd#(1,TLog#(srcSz)))) offset <- mkReg(0);
+
+	PipelineShiftIfc#(TMul#(srcSz,2), TAdd#(1,TLog#(srcSz))) shifter <- mkPipelineShiftRight;
+
+	rule serialize;
+		if ( offset == 0 ) begin
+			inQ.deq;
+			let nbuf = zeroExtend(inQ.first);
+
+			buffer <= inQ.first;
+			offset <= fromInteger(idst);
+			shifter.put(nbuf, 0);
+		end else if ( offset + fromInteger(idst) < fromInteger(isrc) ) begin
+			offset <= offset + fromInteger(idst);
+			shifter.put(zeroExtend(buffer), offset);
+		end else if ( offset + fromInteger(idst) == fromInteger(isrc) ) begin
+			offset <= 0;
+			shifter.put(zeroExtend(buffer), offset);
+		end else begin
+			inQ.deq;
+			buffer <= inQ.first;
+			
+			let hbuf = {inQ.first, buffer};
+			shifter.put(hbuf, offset);
+
+			offset <= offset - fromInteger(isrc-idst);
+		end
+	endrule
+
+	method Action put(Bit#(srcSz) data);
+		inQ.enq(data);
+	endmethod
+	method ActionValue#(Bit#(dstSz)) get;
+		let d <- shifter.get;
+		return truncate(d);
+	endmethod
+endmodule
+
 endpackage: Serializer
+
