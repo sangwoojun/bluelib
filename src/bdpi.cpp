@@ -67,3 +67,10 @@ extern "C" uint32_t bdpi_atan(uint32_t x, uint32_t y) {
 	printf( "--atan- %f\n", fatan );
 	return float_to_fixed(fatan, 16, 3);
 }
+
+extern "C" uint32_t bdpi_divisor(uint32_t a, uint32_t b) {
+	return a/b;
+}
+extern "C" uint32_t bdpi_divisor_remainder(uint32_t a, uint32_t b) {
+	return a%b;
+}
