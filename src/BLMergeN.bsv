@@ -3,6 +3,11 @@ package BLMergeN;
 import FIFO::*;
 import Vector::*;
 
+interface BLMergeEnqIfc#(type dtype);
+	method Action enq(dtype data);
+endinterface
+
+
 interface BLScatterDeqIfc#(type t);
 	method Action deq;
 	method t first;

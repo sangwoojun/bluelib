@@ -6,11 +6,6 @@ import BRAMFIFO::*;
 import MergeN::*;
 import BLMergeN::*;
 
-interface BLMergeEnqIfc#(type dtype);
-	method Action enq(dtype data);
-endinterface
-
-
 interface BLBurstReqMergerIfc#(numeric type cnt, numeric type isz, type dtype, numeric type burstsz);
 	interface Vector#(cnt, BLMergeEnqIfc#(dtype)) enq;
 	method dtype first;
