@@ -74,3 +74,12 @@ extern "C" uint32_t bdpi_divisor(uint32_t a, uint32_t b) {
 extern "C" uint32_t bdpi_divisor_remainder(uint32_t a, uint32_t b) {
 	return a%b;
 }
+
+extern "C" uint64_t bdpi_divisor_double(uint64_t a, uint64_t b) {
+	double ad = *((double*)&a);
+	double bd = *((double*)&b);
+	double rd = ad/bd;
+	uint64_t r = *((uint64_t*)&rd);
+
+	return r;
+}

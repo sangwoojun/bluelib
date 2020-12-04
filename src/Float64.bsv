@@ -6,6 +6,7 @@ import FloatingPoint::*;
 import Float32::*;
 
 import "BDPI" function Bit#(64) bdpi_sqrt64(Bit#(64) data);
+import "BDPI" function Bit#(64) bdpi_divisor_double(Bit#(64) a, Bit#(64) b);
 
 typedef 16 MultLatency64;
 typedef 15 AddLatency64;
@@ -301,6 +302,7 @@ module mkFpDiv64 (FpPairIfc#(64));
 
 	method Action enq(Bit#(64) a, Bit#(64) b);
 `ifdef BSIM
+/* // FIXME for some reason this method blocks with the new bluespec compiler (as of 2020.12). Fixed with bdpi
 	Bool asign = a[63] == 1;
 	Bool bsign = b[63] == 1;
 	Bit#(11) ae = truncate(a>>52);
@@ -312,6 +314,8 @@ module mkFpDiv64 (FpPairIfc#(64));
 	Double fm = fa / fb;
 	//outQ.enq( {fm.sign?1:0,fm.exp,fm.sfd} );
 	latencyQs[0].enq( {fm.sign?1:0,fm.exp,fm.sfd} );
+	*/
+	latencyQs[0].enq( bdpi_divisor_double(a,b) );
 `else
 		fp_div.enqa(a);
 		fp_div.enqb(b);
