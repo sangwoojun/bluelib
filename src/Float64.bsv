@@ -7,6 +7,7 @@ import Float32::*;
 
 import "BDPI" function Bit#(64) bdpi_sqrt64(Bit#(64) data);
 import "BDPI" function Bit#(64) bdpi_divisor_double(Bit#(64) a, Bit#(64) b);
+import "BDPI" function Bit#(64) bdpi_mult_double(Bit#(64) a, Bit#(64) b);
 
 typedef 16 MultLatency64;
 typedef 15 AddLatency64;
@@ -247,6 +248,7 @@ module mkFpMult64 (FpPairIfc#(64));
 
 	method Action enq(Bit#(64) a, Bit#(64) b);
 `ifdef BSIM
+/* // FIXME Unlike FpDiv64, here the math won't block latencyQs[0].enq but it will cause strange output with the new bluespec compiler (as of 2020.12). Fixed with bdpi
 	Bool asign = a[63] == 1;
 	Bool bsign = b[63] == 1;
 	Bit#(11) ae = truncate(a>>52);
@@ -261,6 +263,8 @@ module mkFpMult64 (FpPairIfc#(64));
 	$display( ">> %x %d %x", fa.sign?1:0, fa.exp, fa.sfd );
 	$display( ">> %x %d %x", fb.sign?1:0, fb.exp, fb.sfd );
 	$display( "%x %d %x", fm.sign?1:0, fm.exp, fm.sfd );
+    */
+	latencyQs[0].enq( bdpi_mult_double(a,b) );
 `else
 		fp_mult.enqa(a);
 		fp_mult.enqb(b);
