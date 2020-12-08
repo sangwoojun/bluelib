@@ -46,20 +46,30 @@ module mkLZAH(LZAHIfc#(tsz, hsz))
 	Reg#(Bit#(trsz)) bodyInOffset <- mkReg(0);
 	Reg#(Bit#(tbsz)) bodyInBuffer <- mkReg(0);
 
+	Reg#(Bit#(2)) bodyFillingStep <- mkReg(0);
 	rule getHeader ( headerLeft == 0 );
 		headerLeft <= fromInteger(tSize);
 		headerBitMap <= inQ.first;
 		inQ.deq;
 
 		bodyInOffset <= 0;
-		bodyInLeft <= 0;
+		bodyInLeft <= fromInteger(tSize);
+		bodyFillingStep <= 2;
+
+		//$write("Header: %x\n", inQ.first);
+	endrule
+
+	rule fillBody(headerLeft != 0 && bodyFillingStep != 0 );
+		inQ.deq;
+		bodyInBuffer <= {inQ.first, truncate(bodyInBuffer>>tSize)};
+		bodyFillingStep <= bodyFillingStep - 1;
 	endrule
 
 	
 	BLShiftIfc#(Bit#(tbsz), trsz, 2) shifter <- mkPipelinedShift(True);
 	FIFO#(Bool) isHashHitQ <- mkSizedFIFO(valueOf(trsz)/2 + 1);
 
-	rule relayBody ( headerLeft != 0 );
+	rule relayBody ( headerLeft != 0 && bodyFillingStep == 0 );
 		let bbuf = bodyInBuffer;
 		let bl = bodyInLeft;
 		let bo = bodyInOffset;
@@ -73,14 +83,15 @@ module mkLZAH(LZAHIfc#(tsz, hsz))
 		end
 
 		if ( headerBitMap[0] == 1 ) begin // hash match
-			shifter.enq(bodyInBuffer, bo);
+			shifter.enq(bbuf, bo);
 
 			bo = bo + fromInteger(hSize);
 			bl = bl - fromInteger(hSize);
 			isHashHitQ.enq(True);
+		
 
 		end else begin // verbatim
-			shifter.enq(bodyInBuffer, bo);
+			shifter.enq(bbuf, bo);
 
 			bo = bo + fromInteger(tSize);
 			bl = bl - fromInteger(tSize);
@@ -88,6 +99,7 @@ module mkLZAH(LZAHIfc#(tsz, hsz))
 		end
 
 		bodyInLeft <= bl;
+		bodyInOffset <= bo;
 		
 		headerLeft <= headerLeft - 1;
 		headerBitMap <= (headerBitMap>>1);
@@ -99,6 +111,9 @@ module mkLZAH(LZAHIfc#(tsz, hsz))
 		shifter.deq;
 		let hit = isHashHitQ.first;
 		isHashHitQ.deq;
+			
+		//$write("Hit: %s -- %x\n", hit? "yes" : "no", sd);
+
 
 		verbatimQ.enq(tuple2(hit, truncate(sd)));
 		if ( hit ) begin
@@ -115,10 +130,14 @@ module mkLZAH(LZAHIfc#(tsz, hsz))
 			vv = v_;
 		end
 		
+		//$write("Hit: %s -- %x\n", tpl_1(v)? "yes" : "no", vv);
+		
 		outQ.enq(vv);
 
-		let hash = calcHash16(vv);
-		hashtable.portA.request.put(BRAMRequest{write:True, responseOnWrite:False, address: truncate(hash), datain:vv});
+		if ( !tpl_1(v) ) begin
+			let hash = calcHash16(vv);
+			hashtable.portA.request.put(BRAMRequest{write:True, responseOnWrite:False, address: truncate(hash), datain:vv});
+		end
 	endrule
 
 	method Action enq(Bit#(tsz) data);
