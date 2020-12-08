@@ -75,15 +75,15 @@ module mkLZAH(LZAHIfc#(tsz, hsz))
 		if ( headerBitMap[0] == 1 ) begin // hash match
 			shifter.enq(bodyInBuffer, bo);
 
-			bo = bo + fromInteger(hSize+1);
-			bl = bl - fromInteger(hSize+1);
+			bo = bo + fromInteger(hSize);
+			bl = bl - fromInteger(hSize);
 			isHashHitQ.enq(True);
 
 		end else begin // verbatim
 			shifter.enq(bodyInBuffer, bo);
 
-			bo = bo + fromInteger(tSize+1);
-			bl = bl - fromInteger(tSize+1);
+			bo = bo + fromInteger(tSize);
+			bl = bl - fromInteger(tSize);
 			isHashHitQ.enq(False);
 		end
 
