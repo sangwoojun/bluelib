@@ -23,3 +23,4 @@ module mkLZAHBench(Empty);
 		outputOffset <= outputOffset + 16;
 	endrule
 endmodule
+	

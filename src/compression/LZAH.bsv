@@ -42,65 +42,47 @@ module mkLZAH(LZAHIfc#(tsz, hsz))
 	FIFO#(Bit#(tsz)) inQ <- mkFIFO;
 	FIFO#(Bit#(tsz)) outQ <- mkFIFO;
 	
-	Reg#(Bit#(trsz)) bodyInLeft <- mkReg(0);
-	Reg#(Bit#(trsz)) bodyInOffset <- mkReg(0);
 	Reg#(Bit#(tbsz)) bodyInBuffer <- mkReg(0);
+	Reg#(Bit#(trsz)) bodyInLeft <- mkReg(0);
 
-	Reg#(Bit#(2)) bodyFillingStep <- mkReg(0);
 	rule getHeader ( headerLeft == 0 );
 		headerLeft <= fromInteger(tSize);
 		headerBitMap <= inQ.first;
 		inQ.deq;
 
-		bodyInOffset <= 0;
-		bodyInLeft <= fromInteger(tSize);
-		bodyFillingStep <= 2;
-
+		bodyInLeft <= 0;
 		//$write("Header: %x\n", inQ.first);
 	endrule
 
-	rule fillBody(headerLeft != 0 && bodyFillingStep != 0 );
-		inQ.deq;
-		bodyInBuffer <= {inQ.first, truncate(bodyInBuffer>>tSize)};
-		bodyFillingStep <= bodyFillingStep - 1;
-	endrule
-
-	
 	BLShiftIfc#(Bit#(tbsz), trsz, 2) shifter <- mkPipelinedShift(True);
 	FIFO#(Bool) isHashHitQ <- mkSizedFIFO(valueOf(trsz)/2 + 1);
 
-	rule relayBody ( headerLeft != 0 && bodyFillingStep == 0 );
+	rule relayBody ( headerLeft != 0 );
 		let bbuf = bodyInBuffer;
-		let bl = bodyInLeft;
-		let bo = bodyInOffset;
-		if ( bodyInLeft < fromInteger(tSize) ) begin
-			bbuf = {inQ.first, truncate(bodyInBuffer>>tSize)};
-			bl = bodyInLeft + fromInteger(tSize);
-			bo = bodyInOffset - fromInteger(tSize);
-			inQ.deq;
-
-			bodyInBuffer <= bbuf;
-		end
-
 		if ( headerBitMap[0] == 1 ) begin // hash match
-			shifter.enq(bbuf, bo);
-
-			bo = bo + fromInteger(hSize);
-			bl = bl - fromInteger(hSize);
+			if ( bodyInLeft < fromInteger(hSize) ) begin
+				bodyInBuffer <= zeroExtend(inQ.first);
+				bbuf = {inQ.first, truncate(bbuf)};
+				inQ.deq;
+				bodyInLeft <= bodyInLeft + fromInteger(tSize-hSize);
+			end else begin
+				bodyInLeft <= bodyInLeft - fromInteger(hSize); // never happens?
+			end
+			shifter.enq(bbuf, fromInteger(tSize)-bodyInLeft);
 			isHashHitQ.enq(True);
-		
-
 		end else begin // verbatim
-			shifter.enq(bbuf, bo);
-
-			bo = bo + fromInteger(tSize);
-			bl = bl - fromInteger(tSize);
+			if ( bodyInLeft < fromInteger(tSize) ) begin
+				bodyInBuffer <= zeroExtend(inQ.first);
+				bbuf = {inQ.first, truncate(bbuf)};
+				inQ.deq;
+				// bodyInLeft does not change
+			end else begin
+				bodyInLeft <= bodyInLeft - fromInteger(tSize); // never happens?
+			end
+			shifter.enq(bbuf, fromInteger(tSize)-bodyInLeft);
 			isHashHitQ.enq(False);
 		end
 
-		bodyInLeft <= bl;
-		bodyInOffset <= bo;
-		
 		headerLeft <= headerLeft - 1;
 		headerBitMap <= (headerBitMap>>1);
 	endrule
@@ -134,10 +116,10 @@ module mkLZAH(LZAHIfc#(tsz, hsz))
 		
 		outQ.enq(vv);
 
-		if ( !tpl_1(v) ) begin
-			let hash = calcHash16(vv);
-			hashtable.portA.request.put(BRAMRequest{write:True, responseOnWrite:False, address: truncate(hash), datain:vv});
-		end
+		//if ( !tpl_1(v) ) begin
+		let hash = calcHash16(vv);
+		hashtable.portA.request.put(BRAMRequest{write:True, responseOnWrite:False, address: truncate(hash), datain:vv});
+		//end
 	endrule
 
 	method Action enq(Bit#(tsz) data);
