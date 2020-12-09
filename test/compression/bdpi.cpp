@@ -4,6 +4,14 @@
 
 extern "C" void bdpi_read_file(uint32_t* returnptr, uint32_t offset) {
 	FILE* fin = fopen("/mnt/hdd0/data/hpc4/compressed0000.bin", "rb");
+	fseek(fin, 0, SEEK_END);
+	int len = ftell(fin);
+	if ( offset + 16 > len ) {
+		returnptr[4] = 1;
+		return;
+	}
+	returnptr[4] = 0;
+
 	fseek(fin, offset, SEEK_SET);
 	fread(returnptr, 4, 4, fin);
 	fclose(fin);

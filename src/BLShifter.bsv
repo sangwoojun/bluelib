@@ -22,8 +22,8 @@ module mkPipelinedShift#(Bool shiftRight) (BLShiftIfc#(in_type, shiftsz, shift_b
 	Integer fifocnt = valueOf(TDiv#(shiftsz,shift_bits_per_stage));
 	Integer sbits = valueOf(shift_bits_per_stage);
    
-	Vector#(TDiv#(shiftsz, shift_bits_per_stage), FIFO#(Tuple2#(in_type, Bit#(shiftsz)))) stageQs <- replicateM(mkFIFO);
-	for ( Integer i = 1; i < fifocnt; i=i+1 ) begin
+	Vector#(TAdd#(1,TDiv#(shiftsz, shift_bits_per_stage)), FIFO#(Tuple2#(in_type, Bit#(shiftsz)))) stageQs <- replicateM(mkFIFO);
+	for ( Integer i = 1; i <= fifocnt; i=i+1 ) begin
 		rule shiftRelay;
 			let d_ = stageQs[i-1].first;
 			stageQs[i-1].deq;
@@ -37,9 +37,9 @@ module mkPipelinedShift#(Bool shiftRight) (BLShiftIfc#(in_type, shiftsz, shift_b
 			for ( Integer j = 0; j < sbits; j=j+1 ) begin
 				if (amt[j] == 1) begin
 					if ( shiftRight ) begin
-						sd = sd >> (1<<(i*sbits+j));
+						sd = sd >> (1<<((i-1)*sbits+j));
 					end else begin
-						sd = sd << (1<<(i*sbits+j));
+						sd = sd << (1<<((i-1)*sbits+j));
 					end
 				end
 			end
@@ -54,10 +54,10 @@ module mkPipelinedShift#(Bool shiftRight) (BLShiftIfc#(in_type, shiftsz, shift_b
 		stageQs[0].enq(tuple2(v,shift));
 	endmethod
 	method Action deq;
-		stageQs[fifocnt-1].deq;
+		stageQs[fifocnt].deq;
 	endmethod
 	method in_type first;
-		let r = stageQs[fifocnt-1].first;
+		let r = stageQs[fifocnt].first;
 		return tpl_1(r);
 	endmethod
 endmodule
