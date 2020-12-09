@@ -1,3 +1,10 @@
+/**********
+LZAH : [LZ] variant which uses an [A]lighed [H]ash
+Not really good compression ratios, but works well with log text if aligned to line changes
+**********/
+
+
+
 package LZAH;
 
 import FIFO::*;
@@ -21,6 +28,7 @@ interface LZAHIfc#(numeric type tsz, numeric type hsz);
 	method Action deq;
 	method Bit#(tsz) first;
 endinterface
+
 
 module mkLZAH(LZAHIfc#(tsz, hsz))
 	provisos(Add#(32,a__,tsz), Add#(tsz,tsz,tbsz), Log#(tsz,tlsz), Add#(tlsz,1,trsz),
@@ -149,6 +157,12 @@ module mkLZAH(LZAHIfc#(tsz, hsz))
 	method Bit#(tsz) first;
 		return outQ.first;
 	endmethod
+endmodule
+
+(* synthesize *)
+module mkLZAH128_10(LZAHIfc#(128,10));
+	LZAHIfc#(128,10) lzah <- mkLZAH;
+	return lzah;
 endmodule
 
 endpackage: LZAH
