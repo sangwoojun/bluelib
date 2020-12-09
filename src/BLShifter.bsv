@@ -5,6 +5,14 @@ import Vector::*;
 //import BRAMFIFO::*;
 //import SpecialFIFOs::*;
 
+/*****
+
+Multicycle shifter.
+"shift_bits_per_stage" parameter determines how many bits to process per cycle.
+shiftsz == shift_bits_per_stage returns shift results after 2 cycles
+
+*****/
+
 
 interface BLShiftIfc#(type in_type, numeric type shiftsz, numeric type shift_bits_per_stage); //
 	method Action enq(in_type v, Bit#(shiftsz) shift);
