@@ -430,7 +430,7 @@ module mkFpFma32 (FpThreeOpIfc#(32));
 	endrule
 `endif
 
-	method Action enq(Bit#(width) a, Bit#(width) b, Bit#(width) c, Bool addition);
+	method Action enq(Bit#(32) a, Bit#(32) b, Bit#(32) c, Bool addition);
 `ifdef BSIM
 	Bool asign = a[31] == 1;
 	Bool bsign = b[31] == 1;
