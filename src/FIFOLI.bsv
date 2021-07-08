@@ -16,11 +16,11 @@ interface FIFOLI#(type t, numeric type steps);
 endinterface
 
 module mkFIFOLI(FIFOLI#(t, steps))
-	provisos(Bits#(t, tSz));
+	provisos(Bits#(t, tSz),Div#(steps,2,hsteps));
 
-	Vector#(steps,FIFO#(t)) fifos <- replicateM(mkFIFO);
+	Vector#(hsteps,FIFO#(t)) fifos <- replicateM(mkLFIFO);
 
-	for ( Integer i = 0; i < valueOf(steps)-1; i=i+1 ) begin
+	for ( Integer i = 0; i < valueOf(hsteps)-1; i=i+1 ) begin
 		rule relay;
 			fifos[i].deq;
 			fifos[i+1].enq(fifos[i].first);
@@ -32,10 +32,10 @@ module mkFIFOLI(FIFOLI#(t, steps))
 		fifos[0].enq(d);
 	endmethod
 	method t first;
-		return fifos[valueOf(steps)-1].first;
+		return fifos[valueOf(hsteps)-1].first;
 	endmethod
 	method Action deq;
-		fifos[valueOf(steps)-1].deq;
+		fifos[valueOf(hsteps)-1].deq;
 	endmethod
 endmodule
 
