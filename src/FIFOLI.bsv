@@ -16,9 +16,9 @@ interface FIFOLI#(type t, numeric type steps);
 endinterface
 
 module mkFIFOLI(FIFOLI#(t, steps))
-	provisos(Bits#(t, tSz),Div#(steps,2,hsteps));
+	provisos(Bits#(t, tSz),Div#(steps,1,hsteps));
 
-	Vector#(hsteps,FIFO#(t)) fifos <- replicateM(mkLFIFO);
+	Vector#(hsteps,FIFO#(t)) fifos <- replicateM(mkFIFO);
 
 	for ( Integer i = 0; i < valueOf(hsteps)-1; i=i+1 ) begin
 		rule relay;

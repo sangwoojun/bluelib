@@ -61,9 +61,10 @@ module mkQueueALU(QueueALUIfc#(simd_ways))
 	FIFO#(Vector#(simd_ways, Bit#(64))) inQ1 <- mkFIFO;
 	FIFO#(Vector#(simd_ways, Bit#(64))) inQ2 <- mkFIFO;
 	FIFO#(Vector#(simd_ways, Bit#(64))) outQ <- mkFIFO;
-	FIFOLI#(AluCommandType,4) cmdQ <- mkFIFOLI;
-	FIFO#(AluCommandType) cmdQ2 <- mkLFIFO;
-	FIFO#(Vector#(2,Vector#(simd_ways, Bit#(64)))) paramQ <- mkFIFO;
+	FIFO#(AluCommandType) cmdQ <- mkFIFO;
+	FIFO#(Tuple3#(AluCommandType,Vector#(simd_ways,Bit#(64)),Vector#(simd_ways,Bit#(64)))) cmdQ2 <- mkFIFO;
+	FIFO#(Tuple3#(AluCommandType,Vector#(simd_ways,Bit#(64)),Vector#(simd_ways,Bit#(64)))) cmdQ3 <- mkFIFO;
+	FIFO#(Tuple3#(AluCommandType,Vector#(simd_ways,Bit#(64)),Vector#(simd_ways,Bit#(64)))) cmdQ4 <- mkFIFO;
 
 	
 	Vector#(2,CompletionQueueIfc#(QueueDepthSz, Vector#(simd_ways,Bit#(64)))) cqueue <- replicateM(mkCompletionQueue);
@@ -106,7 +107,7 @@ module mkQueueALU(QueueALUIfc#(simd_ways))
 			mult[i].deq;
 		end
 		multCompleteQ.enq(tuple2(res,t));
-		//$write( "Finishing mult command to %d of %d\n", t, qtarget );
+		//$write( "Finishing mult command to %d\n", t);
 	endrule
 
 	Vector#(simd_ways, FpPairIfc#(64)) dadd <- replicateM(mkFpAdd64);
@@ -123,6 +124,7 @@ module mkQueueALU(QueueALUIfc#(simd_ways))
 			dadd[i].deq;
 		end
 		addCompleteQ.enq(tuple2(res,t));
+		//$write( "Finishing add command to %d\n", t);
 	endrule
 
 	Vector#(simd_ways, FpFilterIfc#(64)) sqrt <- replicateM(mkFpSqrt64);
@@ -138,6 +140,7 @@ module mkQueueALU(QueueALUIfc#(simd_ways))
 			sqrt[i].deq;
 		end
 		sqrtCompleteQ.enq(tuple2(res,t));
+		//$write( "Finishing sqrt command to %d\n", t);
 	endrule
 	
 	Reg#(Bool) forwardAddLastDirection <- mkReg(False);
@@ -146,6 +149,7 @@ module mkQueueALU(QueueALUIfc#(simd_ways))
 			if (multCompleteQ.notEmpty) begin
 				multCompleteQ.deq;
 				addForwardQ.enq(multCompleteQ.first);
+				//$write( "Add - Forwarding mult\n" );
 			end else begin
 				addCompleteQ.deq;
 				addForwardQ.enq(addCompleteQ.first);
@@ -157,6 +161,7 @@ module mkQueueALU(QueueALUIfc#(simd_ways))
 			end else begin
 				multCompleteQ.deq;
 				addForwardQ.enq(multCompleteQ.first);
+				//$write( "Add - Forwarding mult\n" );
 			end
 		end
 		forwardAddLastDirection <= !forwardAddLastDirection;
@@ -171,11 +176,13 @@ module mkQueueALU(QueueALUIfc#(simd_ways))
 			end else begin
 				addForwardQ.deq;
 				sqrtForwardQ.enq(addForwardQ.first);
+				//$write( "Sqrt - Forwarding add\n" );
 			end
 		end else begin
 			if (addForwardQ.notEmpty) begin
 				addForwardQ.deq;
 				sqrtForwardQ.enq(addForwardQ.first);
+				//$write( "Sqrt - Forwarding add\n" );
 			end else begin
 				sqrtCompleteQ.deq;
 				sqrtForwardQ.enq(sqrtCompleteQ.first);
@@ -200,10 +207,13 @@ module mkQueueALU(QueueALUIfc#(simd_ways))
 	
 	
 	rule procCmd2;
-		cmdQ2.deq;
-		let cmd = cmdQ2.first;
-		let params = paramQ.first;
-		paramQ.deq;
+		cmdQ4.deq;
+		let cmd_ = cmdQ4.first;
+		let cmd = tpl_1(cmd_);
+
+		Vector#(2,Vector#(simd_ways,Bit#(64))) params;
+		params[0] = tpl_2(cmd_);
+		params[1] = tpl_3(cmd_);
 
 		let t <- cqueue[nextEnqq].enq;
 		nextEnqq <= ~nextEnqq;
@@ -236,44 +246,64 @@ module mkQueueALU(QueueALUIfc#(simd_ways))
 		let cmd = cmdQ.first;
 
 		Vector#(simd_ways, Bit#(64)) topd = replicate(0);
-		case (cmd.topSrc)
-			ALUQueue: topd = qfirst;
-			ALUInput: begin
-				topd = inQ1.first;
-				inQ1.deq;
-			end
-			ALUImm1: topd = replicate(imm1);
-			ALUImm2: topd = replicate(imm2);
-		endcase
+		if ( cmd.topSrc  == ALUQueue ) topd = qfirst;
 		Vector#(simd_ways, Bit#(64)) nextd = replicate(0);
-		case (cmd.nextSrc)
-			ALUQueue: nextd = qfirst;
-			ALUInput: begin
-				nextd = inQ2.first;
-				inQ2.deq;
-			end
-			ALUImm1: nextd = replicate(imm1);
-			ALUImm2: nextd = replicate(imm2);
-		endcase
-
-
+		if ( cmd.nextSrc  == ALUQueue ) nextd = qnext;
+		
 		qdeq(cmd.popCnt);
+
 		if ( cmd.cmd == ALUOutput ) begin
-			$write("output!\n" );
+			//$write("output!\n" );
 			outQ.enq(qfirst);
 		end else begin
-			Vector#(2,Vector#(simd_ways,Bit#(64))) params;
-			params[0] = topd;
-			params[1] = nextd;
-			paramQ.enq(params);
-			cmdQ2.enq(cmd);
+			//$write( "Command proc 1\n" );
+			cmdQ2.enq(tuple3(cmd,topd,nextd));
 		end
+	endrule
+	rule procParamInput;
+		//$write( "Command proc 2\n" );
+		cmdQ2.deq;
+		let cmd_ = cmdQ2.first;
+		let cmd = tpl_1(cmd_);
+		let topd = tpl_2(cmd_);
+		let nextd = tpl_3(cmd_);
+
+
+		if ( cmd.topSrc == ALUInput ) begin
+			topd = inQ1.first;
+			inQ1.deq;
+		end
+		if ( cmd.nextSrc == ALUInput ) begin
+			nextd = inQ2.first;
+			inQ2.deq;
+		end
+		cmdQ3.enq(tuple3(cmd,topd,nextd));
+	endrule
+	rule procParamImm;
+		//$write( "Command proc 3\n" );
+		cmdQ3.deq;
+		let cmd_ = cmdQ3.first;
+		let cmd = tpl_1(cmd_);
+		let topd = tpl_2(cmd_);
+		let nextd = tpl_3(cmd_);
+
+		if ( cmd.topSrc == ALUImm1 ) begin
+			topd = replicate(imm1);
+		end else if ( cmd.topSrc == ALUImm2 ) begin
+			topd = replicate(imm2);
+		end
+		if ( cmd.nextSrc == ALUImm1 ) begin
+			nextd = replicate(imm1);
+		end else if ( cmd.nextSrc == ALUImm2 ) begin
+			nextd = replicate(imm2);
+		end
+		cmdQ4.enq(tuple3(cmd,topd,nextd));
 	endrule
 	
 
 
 	method Action command(AluCmd cmd, ParamSrc topSrc, ParamSrc nextSrc, Bit#(2) popCnt);
-		//$write( "%d\n", valueOf(MultLatency64) );
+		//$write( "Command in! popcnt %d\n", popCnt );
 		cmdQ.enq(AluCommandType{
 			cmd: cmd, topSrc:topSrc, nextSrc:nextSrc, popCnt:popCnt
 		});
