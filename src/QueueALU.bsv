@@ -18,12 +18,15 @@ typedef enum {
 	ALUOutput, // output top to rest of processor
 	ALUMult,
 	ALUAdd,
-	ALUSqrt
+	ALUSub,
+	ALUSqrt,
+	ALUDiv
 } AluCmd deriving (Eq,Bits);
 
 typedef enum {
 	ALUInput,
-	ALUQueue,
+	ALUQueueHead,
+	ALUQueueNext,
 	ALUImm1,
 	ALUImm2
 } ParamSrc deriving (Eq,Bits);
@@ -45,7 +48,8 @@ endinterface
 
 typedef 8 QueueDepthSz;
 typedef Bit#(QueueDepthSz) QueueDepthType;
-typedef TAdd#(QueueDepthSz,1) QueueDepthTaggedSz;
+typedef Bit#(TAdd#(QueueDepthSz, 2)) PosEpochType;
+typedef TAdd#(QueueDepthSz,3) QueueDepthTaggedSz;
 typedef Bit#(QueueDepthTaggedSz) QueueDepthTaggedType;
 
 (* synthesize *)
@@ -67,7 +71,7 @@ module mkQueueALU(QueueALUIfc#(simd_ways))
 	FIFO#(Tuple3#(AluCommandType,Vector#(simd_ways,Bit#(64)),Vector#(simd_ways,Bit#(64)))) cmdQ4 <- mkFIFO;
 
 	
-	Vector#(2,CompletionQueueIfc#(QueueDepthSz, Vector#(simd_ways,Bit#(64)))) cqueue <- replicateM(mkCompletionQueue);
+	Vector#(2,CompletionQueueIfc#(QueueDepthSz, TAdd#(QueueDepthSz,2), Vector#(simd_ways,Bit#(64)))) cqueue <- replicateM(mkCompletionQueue);
 	Reg#(Bit#(1)) nextFirstq <- mkReg(0);
 	Reg#(Bit#(1)) nextEnqq <- mkReg(0);
 
@@ -142,7 +146,24 @@ module mkQueueALU(QueueALUIfc#(simd_ways))
 		sqrtCompleteQ.enq(tuple2(res,t));
 		//$write( "Finishing sqrt command to %d\n", t);
 	endrule
-	
+
+	Vector#(simd_ways, FpPairIfc#(64)) ddiv <- replicateM(mkFpDiv64);
+	FIFOLI#(QueueDepthTaggedType, DivLatency64) divTarget <- mkFIFOLI;
+	FIFOF#(Tuple2#(Vector#(simd_ways, Bit#(64)), QueueDepthTaggedType)) divCompleteQ <- mkFIFOF;
+	FIFOF#(Tuple2#(Vector#(simd_ways, Bit#(64)), QueueDepthTaggedType)) divForwardQ <- mkFIFOF;
+	rule divResult;
+		let t = divTarget.first;
+		divTarget.deq;
+
+		Vector#(simd_ways, Bit#(64)) res;
+		for (Integer i = 0; i < valueOf(simd_ways); i=i+1 ) begin
+			res[i] = ddiv[i].first;
+			ddiv[i].deq;
+		end
+		divCompleteQ.enq(tuple2(res,t));
+        //$write("Cycle %1d -> [QALU %1d] div out\n", cycles, id);
+	endrule
+
 	Reg#(Bool) forwardAddLastDirection <- mkReg(False);
 	rule forwardAdd;
 		if ( forwardAddLastDirection ) begin
@@ -191,13 +212,37 @@ module mkQueueALU(QueueALUIfc#(simd_ways))
 		forwardSqrtLastDirection <= !forwardSqrtLastDirection;
 	endrule
 
+	Reg#(Bool) forwardDivLastDirection <- mkReg(False);
+	rule forwardDiv;
+		if ( forwardDivLastDirection) begin
+			if (divCompleteQ.notEmpty) begin
+				divCompleteQ.deq;
+				divForwardQ.enq(divCompleteQ.first);
+			end else begin
+				sqrtForwardQ.deq;
+				divForwardQ.enq(sqrtForwardQ.first);
+				//$write( "Div - Forwarding sqrt\n" );
+			end
+		end else begin
+			if (sqrtForwardQ.notEmpty) begin
+				sqrtForwardQ.deq;
+				divForwardQ.enq(sqrtForwardQ.first);
+				//$write( "Div - Forwarding sqrt\n" );
+			end else begin
+				divCompleteQ.deq;
+				divForwardQ.enq(divCompleteQ.first);
+			end
+		end
+		forwardDivLastDirection <= !forwardDivLastDirection;
+	endrule
+
 	rule applyCompletion;
-		sqrtForwardQ.deq;
-		let d_ = sqrtForwardQ.first;
+		divForwardQ.deq;
+		let d_ = divForwardQ.first;
 		let res = tpl_1(d_);
 		let t_ = tpl_2(d_);
 		Bit#(1) qidx = truncate(t_);
-		QueueDepthType t = truncate(t_>>1);
+		PosEpochType t = truncate(t_>>1);
 		cqueue[qidx].complete(t,res);
 		//$write( "Completing %d %d\n", qidx, t );
 	endrule
@@ -230,11 +275,28 @@ module mkQueueALU(QueueALUIfc#(simd_ways))
 				for (Integer i = 0; i < valueOf(simd_ways); i=i+1 ) dadd[i].enq(params[0][i], params[1][i]);
 				addTarget.enq(enqt);
 				//$write( "Starting add command\n" );
+                //$write("Cycle %1d -> [QALU %1d] add in.\n", cycles, id);
+			end
+			ALUSub: begin
+                // params[0][i] - params[1][i]
+                // use adder to implement the sub
+				for (Integer i = 0; i < valueOf(simd_ways); i=i+1 ) begin
+                    params[1][i][63] = ~params[1][i][63];
+                    dadd[i].enq(params[0][i], params[1][i]);
+                end
+				addTarget.enq(enqt);
+				//$write( "Starting add command\n" );
+                //$write("Cycle %1d -> [QALU %1d] add in.\n", cycles, id);
 			end
 			ALUSqrt: begin
 				for (Integer i = 0; i < valueOf(simd_ways); i=i+1 ) sqrt[i].enq(params[0][i]);
 				sqrtTarget.enq(enqt);
 				//$write( "Starting sqrt command\n" );
+			end
+			ALUDiv: begin
+				for (Integer i = 0; i < valueOf(simd_ways); i=i+1 ) ddiv[i].enq(params[0][i], params[1][i]);
+				divTarget.enq(enqt);
+				//$write( "Starting div command\n" );
 			end
 		endcase
 	endrule
@@ -246,9 +308,11 @@ module mkQueueALU(QueueALUIfc#(simd_ways))
 		let cmd = cmdQ.first;
 
 		Vector#(simd_ways, Bit#(64)) topd = replicate(0);
-		if ( cmd.topSrc  == ALUQueue ) topd = qfirst;
+		if ( cmd.topSrc  == ALUQueueHead ) topd = qfirst;
+        else if(cmd.topSrc == ALUQueueNext) topd = qnext;
 		Vector#(simd_ways, Bit#(64)) nextd = replicate(0);
-		if ( cmd.nextSrc  == ALUQueue ) nextd = qnext;
+		if ( cmd.nextSrc  == ALUQueueHead ) nextd = qfirst;
+        else if(cmd.nextSrc == ALUQueueNext) nextd = qnext; 
 		
 		qdeq(cmd.popCnt);
 
