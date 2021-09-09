@@ -43,7 +43,7 @@ module mkCompletionQueue(CompletionQueueIfc#(szlog, szlog2, dtype))
 
 		//$write( "CQueue checking at %d\n", curreq );
 		head <= curreq + 1;
-        headq.enq(head);
+        headq.enq(curreq);
 
 		queuemem.portA.request.put(BRAMRequest{write:False, responseOnWrite:False, address: curreq, datain: ?});
 
@@ -51,7 +51,7 @@ module mkCompletionQueue(CompletionQueueIfc#(szlog, szlog2, dtype))
 		headReqEpochSend <= epoch;
 	endrule
 
-	rule pollHeadrecv;
+	rule pollHeadRecv;
 		match {.d, .val_epoch} <- queuemem.portA.response.get;
 		headReqQ.deq;
         let h = headq.first;
