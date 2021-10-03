@@ -75,6 +75,15 @@ extern "C" uint32_t bdpi_divisor_remainder(uint32_t a, uint32_t b) {
 	return a%b;
 }
 
+extern "C" uint32_t bdpi_divisor_float(uint32_t a, uint32_t b) {
+	float ad = *((float*)&a);
+	float bd = *((float*)&b);
+	float rd = ad/bd;
+	uint32_t r = *((uint32_t*)&rd);
+
+	return r;
+}
+
 extern "C" uint64_t bdpi_mult_double(uint64_t a, uint64_t b) {
 	double ad = *((double*)&a);
 	double bd = *((double*)&b);
@@ -91,4 +100,10 @@ extern "C" uint64_t bdpi_divisor_double(uint64_t a, uint64_t b) {
 	uint64_t r = *((uint64_t*)&rd);
 
 	return r;
+}
+
+extern "C" uint32_t bdpi_sqrt_cube32(uint32_t data) {
+	float r = sqrt(*(float*)&data);
+    r = r * (*(float*)&data);
+	return *(uint32_t*)&r;
 }

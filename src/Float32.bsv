@@ -6,6 +6,8 @@ import FloatingPoint::*;
 
 
 import "BDPI" function Bit#(32) bdpi_sqrt32(Bit#(32) data);
+import "BDPI" function Bit#(32) bdpi_sqrt_cube32(Bit#(32) data);
+import "BDPI" function Bit#(32) bdpi_divisor_float(Bit#(32) a, Bit#(32) b);
 
 typedef 7 MultLatency32;
 typedef 12 AddLatency32;
@@ -13,6 +15,7 @@ typedef 12 SubLatency32;
 typedef 29 DivLatency32;
 typedef 29 SqrtLatency32;
 typedef 19 FmaLatency32;
+typedef 36 SqrtCubeLatency32;
 
 interface FpFilterImportIfc#(numeric type width);
 	method Action enq(Bit#(width) a);
@@ -339,6 +342,7 @@ module mkFpDiv32 (FpPairIfc#(32));
 
 	method Action enq(Bit#(32) a, Bit#(32) b);
 `ifdef BSIM
+    /* FIXME. This is the same bug as the one in "mkFpDiv64". Again, we fixed it with bdpi.
 	Bool asign = a[31] == 1;
 	Bool bsign = b[31] == 1;
 	Bit#(8) ae = truncate(a>>23);
@@ -350,6 +354,8 @@ module mkFpDiv32 (FpPairIfc#(32));
 	Float fm = fa / fb;
 	//outQ.enq( {fm.sign?1:0,fm.exp,fm.sfd} );
 	latencyQs[0].enq( {fm.sign?1:0,fm.exp,fm.sfd} );
+    */
+	latencyQs[0].enq( bdpi_divisor_float(a,b) );
 `else
 		fp_div.enqa(a);
 		fp_div.enqb(b);
@@ -454,6 +460,47 @@ module mkFpFma32 (FpThreeOpIfc#(32));
 		fp_fma.enqb(b);
 		fp_fma.enqc(c);
 		fp_fma.enqop(addition?0:1); // addition, subtract
+`endif
+	endmethod
+	method Action deq;
+		outQ.deq;
+	endmethod
+	method Bit#(32) first;
+		return outQ.first;
+	endmethod
+endmodule
+
+module mkFpSqrtCube32 (FpFilterIfc#(32));
+	Clock curClk <- exposeCurrentClock;
+	Reset curRst <- exposeCurrentReset;
+
+	FIFO#(Bit#(32)) outQ <- mkFIFO;
+`ifdef BSIM
+	Vector#(SqrtCubeLatency32, FIFO#(Bit#(32))) latencyQs <- replicateM(mkFIFO);
+	for (Integer i = 0; i < valueOf(SqrtCubeLatency32)-1; i=i+1 ) begin
+		rule relay;
+			latencyQs[i].deq;
+			latencyQs[i+1].enq(latencyQs[i].first);
+		endrule
+	end
+	rule relayOut;
+		Integer lastIdx = valueOf(SqrtCubeLatency32)-1;
+		latencyQs[lastIdx].deq;
+		outQ.enq(latencyQs[lastIdx].first);
+	endrule
+`else
+	FpFilterImportIfc#(32) fp_sqrt <- mkFpSqrtImport32(curClk, curRst);
+	rule getOut;
+		let v <- fp_sqrt.get;
+		outQ.enq(v);
+	endrule
+`endif
+
+	method Action enq(Bit#(32) a);
+`ifdef BSIM
+	latencyQs[0].enq( bdpi_sqrt_cube32(a) );
+`else
+		fp_sqrt.enq(a);
 `endif
 	endmethod
 	method Action deq;

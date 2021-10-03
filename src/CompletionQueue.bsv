@@ -9,6 +9,7 @@ import BRAMFIFO::*;
 
 interface CompletionQueueIfc#(numeric type szlog, numeric type szlog2, type dtype);
 	method ActionValue#(Bit#(szlog2)) enq;
+    method Action advance_tail(Bit#(szlog) off);
 	method dtype first;
 	method Action deq;
 	method Bool available;
@@ -73,12 +74,22 @@ module mkCompletionQueue(CompletionQueueIfc#(szlog, szlog2, dtype))
 		end
 	endrule
 
+/*
 	method ActionValue#(Bit#(szlog2)) enq if ( tail + 2 != head );
 		tail <= tail + 1;
         if(tail == fromInteger(max_pos)) tail_epoch <= tail_epoch + 1;
         Bit#(szlog2) addr_epoch = {tail, tail_epoch};
 		return addr_epoch;
 	endmethod
+*/
+	method ActionValue#(Bit#(szlog2)) enq if ( tail + 2 != head );
+        Bit#(szlog2) addr_epoch = {tail, tail_epoch};
+		return addr_epoch;
+	endmethod
+    method Action advance_tail(Bit#(szlog) off);
+        tail <= tail + off;
+        if(tail + off < tail) tail_epoch <= tail_epoch + 1;
+    endmethod
 	method dtype first;
 		return headValueQ.first;
 	endmethod
@@ -88,7 +99,7 @@ module mkCompletionQueue(CompletionQueueIfc#(szlog, szlog2, dtype))
 	method Bool available = headValueQ.notEmpty;
 
 	method Action complete(Bit#(szlog2) addr_epoch, dtype data);
-        Bit#(szlog) addr = truncate(addr_epoch >> 2); 
+        Bit#(szlog) addr = truncate(addr_epoch >> 2);
         Bit#(2) epoch = truncate(addr_epoch);
 		queuemem.portB.request.put(
 			BRAMRequest{write:True, responseOnWrite:False, address:addr, datain: tuple2(data, epoch)});
