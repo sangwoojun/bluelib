@@ -103,7 +103,6 @@ extern "C" uint64_t bdpi_divisor_double(uint64_t a, uint64_t b) {
 }
 
 extern "C" uint32_t bdpi_sqrt_cube32(uint32_t data) {
-	float r = sqrt(*(float*)&data);
-    r = r * (*(float*)&data);
-	return *(uint32_t*)&r;
+	float r = powf(*((float*)&data), 3.0/2.0);
+	return *((uint32_t*)&r);
 }

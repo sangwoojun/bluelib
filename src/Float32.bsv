@@ -490,8 +490,17 @@ module mkFpSqrtCube32 (FpFilterIfc#(32));
 	endrule
 `else
 	FpFilterImportIfc#(32) fp_sqrt <- mkFpSqrtImport32(curClk, curRst);
-	rule getOut;
+	FIFO#(Bit#(32)) relayQ <- mkFIFO;
+	FpPairImportIfc#(32) fp_mult <- mkFpMultImport32(curClk, curRst);
+	rule getSqrt;
 		let v <- fp_sqrt.get;
+        let a = relayQ.first;
+        relayQ.deq;
+        fp_mult.enqa(v);
+        fp_mult.enqb(a);
+	endrule
+	rule getOut;
+		let v <- fp_mult.get;
 		outQ.enq(v);
 	endrule
 `endif
@@ -501,6 +510,7 @@ module mkFpSqrtCube32 (FpFilterIfc#(32));
 	latencyQs[0].enq( bdpi_sqrt_cube32(a) );
 `else
 		fp_sqrt.enq(a);
+        relayQ.enq(a);
 `endif
 	endmethod
 	method Action deq;
