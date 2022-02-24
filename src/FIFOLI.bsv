@@ -7,18 +7,22 @@ May be used to make routing easier over latency-insensitive queues
 package FIFOLI;
 
 import FIFO::*;
+import FIFOF::*;
 import Vector::*;
 
 interface FIFOLI#(type t, numeric type steps);
 	method Action enq(t d);
 	method t first;
 	method Action deq;
+
+	method Bool notEmpty;
+	method Bool notFull;
 endinterface
 
 module mkFIFOLI(FIFOLI#(t, steps))
 	provisos(Bits#(t, tSz),Div#(steps,1,hsteps));
 
-	Vector#(hsteps,FIFO#(t)) fifos <- replicateM(mkFIFO);
+	Vector#(hsteps,FIFOF#(t)) fifos <- replicateM(mkFIFOF);
 
 	for ( Integer i = 0; i < valueOf(hsteps)-1; i=i+1 ) begin
 		rule relay;
@@ -28,15 +32,11 @@ module mkFIFOLI(FIFOLI#(t, steps))
 	end
 
 
-	method Action enq(t d);
-		fifos[0].enq(d);
-	endmethod
-	method t first;
-		return fifos[valueOf(hsteps)-1].first;
-	endmethod
-	method Action deq;
-		fifos[valueOf(hsteps)-1].deq;
-	endmethod
+	method enq = fifos[0].enq;
+	method first = fifos[valueOf(hsteps)-1].first;
+	method deq = fifos[valueOf(hsteps)-1].deq;
+	method notEmpty = fifos[valueOf(hsteps)-1].notEmpty;
+	method notFull = fifos[valueOf(hsteps)-1].notFull;
 endmodule
 
 endpackage: FIFOLI
