@@ -19,7 +19,7 @@ void init() {
 
 	srand(time(NULL));
 	for ( size_t i = 0; i < INPUT_DATE_BYTES/sizeof(uint32_t); i++ ) {
-		//g_input_data[i] = (rand()&0xffffff) + (((rand()%8)+8)<<24);
+		//g_input_data[i] = (rand()&0xffffff) + ((rand()%32)<<25);
 		g_input_data[i] = rand();
 		g_output_data[i] = rand();
 	}
@@ -49,7 +49,7 @@ extern "C" void bdpi_verify(uint32_t cnt_, uint32_t cycles) {
 	uint32_t burst_len = 0;
 	for ( size_t i = 0; i < (size_t)cnt; i++ ) {
 		uint32_t cur = g_output_data[i];
-		uint32_t bucket = (cur>>(32-7));
+		uint32_t bucket = cur % 128; //(cur>>(32-7));
 		if ( bucket != last_bucket ) {
 			last_bucket = bucket;
 			burst_len = 0;

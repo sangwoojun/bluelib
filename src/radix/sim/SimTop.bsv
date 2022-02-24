@@ -8,10 +8,15 @@ import "BDPI" function Action bdpi_verify(Bit#(32) cnt, Bit#(32) cycles);
 
 module mkSimTop(Empty);
 	//BLRadixIfc#(10,3,4,Bit#(32),24,7) radixSub <- mkBLRadixSub(8);
-	BLRadixIfc#(10,3,4,Bit#(32),24,7) radixSub <- mkBLRadix;
+	BLRadixIfc#(10,3,4,Bit#(32),0,7) radixSub <- mkBLRadix;
 	Reg#(Bit#(32)) dataInputCounter <- mkReg(0);
+	
+	Reg#(Bit#(32)) cycleCounter <- mkReg(0);
+	rule incCycle;
+		cycleCounter <= cycleCounter + 1;
+	endrule
 
-	Integer dataCnt = 1024*1024;
+	Integer dataCnt = 1024*512;
 	rule inputData(dataInputCounter<fromInteger(dataCnt));
 		dataInputCounter <= dataInputCounter + 1;
 		Vector#(4,Bit#(32)) ind;
@@ -23,25 +28,28 @@ module mkSimTop(Empty);
 
 		if ( dataInputCounter + 1 >= fromInteger(dataCnt) ) begin
 			radixSub.flush();
-			//bdpi_verify(fromInteger(dataCnt));
+			//bdpi_verify(fromInteger(dataCnt), cycleCounter);
+			$write ( "Done sending reqs -- %d cycles\n", cycleCounter );
 		end
 	endrule
+	
 
 	Reg#(Bit#(32)) burstTotal <- mkReg(0);
+	Reg#(Bit#(32)) startCycle <- mkReg(0);
 	rule flushBurstReady;
 		let d <- radixSub.burstReady;
 		burstTotal <= burstTotal + zeroExtend(d);
+		if ( startCycle == 0 ) begin
+			startCycle <= cycleCounter;
+			$write( "Setting start cycle to %d\n", cycleCounter );
+		end
 		if ( burstTotal > 0 ) begin
 			//$write("Bursting %d -> %d\n", d, burstTotal );
-			//bdpi_verify(burstTotal);
+			//bdpi_verify(burstTotal, cycleCounter-startCycle);
 		end
 	endrule
 
 
-	Reg#(Bit#(32)) cycleCounter <- mkReg(0);
-	rule incCycle;
-		cycleCounter <= cycleCounter + 1;
-	endrule
 
 	Reg#(Bit#(32)) dataOutputCounter <- mkReg(0);
 	rule readOutput;
@@ -53,7 +61,7 @@ module mkSimTop(Empty);
 		bdpi_writeoutput(dataOutputCounter*4+3, outd[3]);
 		dataOutputCounter <= dataOutputCounter + 1;
 		if ( dataOutputCounter + 1 >= fromInteger(dataCnt)-128 ) begin
-			bdpi_verify(dataOutputCounter, cycleCounter);
+			bdpi_verify(dataOutputCounter, cycleCounter-startCycle);
 
 		end
 	endrule

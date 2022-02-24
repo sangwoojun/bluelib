@@ -30,6 +30,7 @@ module mkBLRadixSub#(Integer bucketOff) (BLRadixIfc#(lenSz,waysSz,tupleCnt,dtype
 		Add#(burstSz,1,lenSz),
 		Add#(a__, subBitLen, dsz),
 		Add#(b__, waysSz, subBitLen),
+		Add#(1, c__, TMul#(tupleCnt, dsz)),
 		Bits#(dtype,dsz)
 	);
 	Reg#(Bool) flushing <- mkReg(False);
@@ -41,7 +42,13 @@ module mkBLRadixSub#(Integer bucketOff) (BLRadixIfc#(lenSz,waysSz,tupleCnt,dtype
 	Integer iTupleCnt = valueOf(tupleCnt);
 	Integer halfBufferLen = valueOf(TExp#(waySerSz))/2;
 
-	FIFO#(Vector#(tupleCnt, dtype) ) inputQ <- mkFIFO;
+
+	Reg#(Bit#(32)) cycleCounter <- mkReg(0);
+	rule incCycle;
+		cycleCounter <= cycleCounter + 1;
+	endrule
+
+	FIFO#(Vector#(tupleCnt, dtype) ) inputQ <- mkSizedBRAMFIFO(256);
 	FIFO#(dtype) serialInputQ <- mkFIFO;
 	Reg#(Vector#(TSub#(tupleCnt,1),dtype)) serializerBuffer <- mkReg(?);
 	Reg#(Bit#(TLog#(tupleCnt))) serializerCnt <- mkReg(0);
@@ -53,7 +60,6 @@ module mkBLRadixSub#(Integer bucketOff) (BLRadixIfc#(lenSz,waysSz,tupleCnt,dtype
 			serialInputQ.enq(v[0]);
 
 			serializerCnt <= fromInteger(iTupleCnt-1);
-
 			Vector#(TSub#(tupleCnt,1), dtype) nb;
 			for ( Integer i = 0; i < fromInteger(iTupleCnt-1); i=i+1) begin
 				nb[i] = v[i+1];
@@ -247,7 +253,10 @@ module mkBLRadix (BLRadixIfc#(lenSz,subWaysSz,tupleCnt,dtype,subBitOff,subBitLen
 		Add#(b__, subWaysSz, subBitLen),
 		Bits#(dtype,dsz)
 	);
-	Reg#(Bool) flushing <- mkReg(False);
+	Reg#(Bit#(32)) cycleCounter <- mkReg(0);
+	rule incCycle;
+		cycleCounter <= cycleCounter + 1;
+	endrule
 
 	Vector#(TExp#(waysSz), BLRadixIfc#(lenSz,subWaysSz,tupleCnt,dtype,subBitOff,subBitLen)) subRadix;
 	Vector#(TExp#(waysSz), FIFO#(Vector#(tupleCnt, dtype))) inputChainQ <- replicateM(mkFIFO);
@@ -286,6 +295,11 @@ module mkBLRadix (BLRadixIfc#(lenSz,subWaysSz,tupleCnt,dtype,subBitOff,subBitLen
 			subRadix[i].deq;
 			outputQ.enq(subRadix[i].first);
 		endrule
+		/*
+		rule flushff;
+			let d <- subRadix[i].burstReady;
+		endrule
+		*/
 
 		Reg#(Bit#(lenSz)) forwardLeft <- mkReg(0);
 		Reg#(Bool) isForwardLocal <- mkReg(False);
@@ -316,6 +330,7 @@ module mkBLRadix (BLRadixIfc#(lenSz,subWaysSz,tupleCnt,dtype,subBitOff,subBitLen
 				//outputChainQ[i].enq(outputQ.first);
 
 				outputBurstReadyQ[i].enq(f);
+				//$write( "Cycle %d :Burst from subRadix %d\n", cycleCounter, i );
 			end
 		endrule
 	end
