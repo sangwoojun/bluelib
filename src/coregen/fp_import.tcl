@@ -1,3 +1,11 @@
+read_ip $libdir/bf_add16/bf_add16.xci
+read_ip $libdir/bf_sub16/bf_sub16.xci
+read_ip $libdir/bf_mult16/bf_mult16.xci
+read_ip $libdir/bf_div16/bf_div16.xci
+read_ip $libdir/fp_add16/fp_add16.xci
+read_ip $libdir/fp_sub16/fp_sub16.xci
+read_ip $libdir/fp_mult16/fp_mult16.xci
+read_ip $libdir/fp_div16/fp_div16.xci
 read_ip $libdir/fp_add32/fp_add32.xci
 read_ip $libdir/fp_sub32/fp_sub32.xci
 read_ip $libdir/fp_mult32/fp_mult32.xci
@@ -10,4 +18,3 @@ read_ip $libdir/fp_div64/fp_div64.xci
 read_ip $libdir/fp_sqrt64/fp_sqrt64.xci
 read_ip $libdir/cordic_sincos/cordic_sincos.xci
 read_ip $libdir/cordic_atan/cordic_atan.xci
-
