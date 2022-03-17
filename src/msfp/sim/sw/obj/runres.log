@@ -13,6 +13,7 @@ Each sign+frac takes 5 bits (1 sign + 4 frac)
 -0.246675
 -0.336833
 53'h01abcb223c54a7d
+125 -> -2
 0.464184
 0.418108
 -0.048069
@@ -23,6 +24,7 @@ Each sign+frac takes 5 bits (1 sign + 4 frac)
 -0.310707
 -0.464537
 53'h01eccb634c5ae7d
+125 -> -2
 0.394167
 0.377403
 -0.045949
@@ -33,3 +35,4 @@ Each sign+frac takes 5 bits (1 sign + 4 frac)
 -0.280342
 -0.416023
 53'h01dc674c46d8c7a
+122 -> -5

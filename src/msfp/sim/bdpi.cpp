@@ -15,24 +15,77 @@ float channel1[9] = {
 -0.246675,
 -0.336833
 };
+//53'h01abcb223c54a7d
+//125 -> -2
+float channel2[9] = {
+0.464184,
+0.418108,
+-0.048069,
+0.305112,
+0.103854,
+-0.373141,
+-0.076468,
+-0.310707,
+-0.464537
+};
+//53'h01eccb634c5ae7d
+//125 -> -2
+float channel3[9] = {
+0.394167,
+0.377403,
+-0.045949,
+0.267130,
+0.099864,
+-0.341009,
+-0.075736,
+-0.280342,
+-0.416023
+};
+//53'h01dc674c46d8c7a
+//122 -> -5
 
-uint8_t testinput[3] = {
+
+uint8_t testinput[9] = {
 	5,
-	200,
-	2
+	250,
+	64,
+
+	82,
+	24,
+	240,
+
+	0,
+	1,
+	82
 };
 
-extern "C" uint32_t bdpi_readinput(uint32_t addr) {
-	return (testinput[2]<<16)|(testinput[1]<<8)|testinput[0];
+extern "C" uint32_t bdpi_readinput(uint32_t addr, uint32_t offset) {
+	return (testinput[2+offset]<<16)|(testinput[1+offset]<<8)|testinput[0+offset];
 }
 extern "C" void bdpi_writeoutput(uint64_t data) { // 3 bfloat16
-	float t0 = ((float)testinput[0])/256;
-	float t1 = ((float)testinput[1])/256;
-	float t2 = ((float)testinput[2])/256;
+	float fi[9];
+	float* fw[3] = {channel1, channel2,channel3};
+	for ( int i = 0; i < 9; i++ ) fi[i] = ((float)testinput[i])/256;
 
-	float r0 = t0*channel1[0] + t1*channel1[3] + t2*channel1[6];
-	float r1 = t0*channel1[1] + t1*channel1[4] + t2*channel1[7];
-	float r2 = t0*channel1[2] + t1*channel1[5] + t2*channel1[8];
+	float colsums[3] = {0};
+	for ( int i = 0; i < 3; i++ ) { // channels
+		for ( int col = 0; col < 3; col ++ ) { // cols
+			for ( int row = 0; row < 3; row ++ ) { // rows
+				colsums[col] += fi[i*3+row]*fw[i][row*3+col];
+			}
+		}
+	}
+	/*
+	float a0 = t0*channel1[0] + t1*channel1[3] + t2*channel1[6];
+	float a1 = t0*channel1[1] + t1*channel1[4] + t2*channel1[7];
+	float a2 = t0*channel1[2] + t1*channel1[5] + t2*channel1[8];
+	float b0 = t0*channel2[0] + t1*channel2[3] + t2*channel2[6];
+	float b1 = t0*channel2[1] + t1*channel2[4] + t2*channel2[7];
+	float b2 = t0*channel2[2] + t1*channel2[5] + t2*channel2[8];
+	float c0 = t0*channel3[0] + t1*channel3[3] + t2*channel3[6];
+	float c1 = t0*channel3[1] + t1*channel3[4] + t2*channel3[7];
+	float c2 = t0*channel3[2] + t1*channel3[5] + t2*channel3[8];
+*/
 
 	uint32_t da[3] = {0};
 	uint32_t d0 = data&0xffff;
@@ -41,19 +94,6 @@ extern "C" void bdpi_writeoutput(uint64_t data) { // 3 bfloat16
 	da[0] = d0; da[1] = d1; da[2] = d2;
 
 	for ( int i = 0; i < 3; i++ ) {
-		uint32_t d0 = da[i];
-		uint32_t sign = 1&(d0>>15);
-		uint32_t mantissa = d0&((1<<7)-1);
-		uint32_t exp = (d0>>7)&0xff;
-		int shamt = 0;
-		while ( 1&(mantissa>>7) == 0 && shamt < 7 ) { // shift by 7 to account for the MSB 1, which will be truncated later
-			shamt++;
-			mantissa <<= 1;
-			printf( "s" );
-		}
-		printf( "\n" );
-		mantissa &= ((1<<7)-1);
-		da[i] = (sign<<15)|((exp-shamt+2)<<7)|mantissa;
 		da[i] <<= 16; // back to float32
 	}
 
@@ -62,10 +102,7 @@ extern "C" void bdpi_writeoutput(uint64_t data) { // 3 bfloat16
 
 
 
-	printf( "Orig: %f %f %f\n", r0, r1, r2 );
+	//printf( "Orig: %f %f %f\n", a0+b0+c0, a1+b1+c1, a2+b2+c2 );
+	printf( "Orig: %f %f %f\n", colsums[0], colsums[1], colsums[2] );
 	printf( "Core: %f %f %f\n", *(float*)&da[0],*(float*)&da[1],*(float*)&da[2] );
-	exit(0);
-
-	
-
 }
