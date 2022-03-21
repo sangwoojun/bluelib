@@ -92,38 +92,77 @@ module mkBLMacMSFP12_3#(Bit#(53) block1, Bit#(53) block2, Bit#(53) block3) (BLMa
 
 	Vector#(3,BLMSFPtoBFloat16Ifc) msfp2bf <- replicateM(mkMSFPtoBFloat16(pack(maxexp)+127+4));  // shifting by 4 to adjust for mantissa shift in mkBLMacMSFP12
 
-	rule sumchannels;
-		Vector#(3,Vector#(3, MSFPTempFrac)) psum;
-		for ( Integer i = 0; i < 3; i=i+1 ) begin
+
+	Vector#(3, FIFO#(Bit#(1))) signQ_1 <- replicateM(mkFIFO);
+	Vector#(3, FIFO#(Bit#(17))) mantissaQ_1 <- replicateM(mkFIFO);
+    Vector#(3, FIFO#(Bit#(1))) signQ_2 <- replicateM(mkFIFO);
+	Vector#(3, FIFO#(Bit#(17))) mantissaQ_2 <- replicateM(mkFIFO);
+	Vector#(3, Reg#(Bit#(1))) valid <- replicateM(mkReg(1));
+
+	rule resolve_lock(valid[0] == 0 && valid[1] == 0 && valid[2] == 0);
+		for ( Integer i = 0; i < 3; i= i+1) begin
 			pev[i].deq;
-			psum[i] = pev[i].first;
-		end
-		
-		for ( Integer col = 0; col < 3; col = col + 1) begin
-			//Bit#(1) sign = psum[0][col].sign;
-			//Int#(8) expdiff0 = maxexp-expo[0];
-			//Bit#(5) mantissa = zeroExtend(psum[0][col].mantissa>>expdiff0);
-			Bit#(1) sign = 0;
-			Bit#(17) mantissa = 0;
-
-			for ( Integer i = 0; i < 3; i=i+1 ) begin
-				Int#(8) expdiff = maxexp-expo[i];
-				Bit#(17) nmantissa = (psum[i][col].mantissa>>expdiff);
-				//$write("%d,%d>> %d %d\n", i,col, psum[i][col].mantissa, expdiff);
-
-				if ( psum[i][col].sign == sign ) begin
-					mantissa = nmantissa + mantissa;
-				end else if ( nmantissa > mantissa ) begin
-					sign = ~sign;
-					mantissa = nmantissa - mantissa;
-				end else begin
-					mantissa = mantissa - nmantissa;
-				end
-			end
-			msfp2bf[col].enq(sign, mantissa);
+			valid[i] <= 1;
 		end
 	endrule
 
+	for ( Integer col = 0; col < 3; col = col + 1) begin
+			rule sumchannels_1(valid[col] == 1);
+					Vector#(3, MSFPTempFrac) psum = pev[0].first;
+					Bit#(1) sign = 0;
+					Bit#(17) mantissa = 0;
+					Int#(8) expdiff = maxexp-expo[0];
+					Bit#(17) nmantissa = (psum[col].mantissa>>expdiff);
+					if ( psum[col].sign == sign ) begin
+							mantissa = nmantissa + mantissa;
+					end else if ( nmantissa > mantissa ) begin
+							sign = ~sign;
+							mantissa = nmantissa - mantissa;
+					end else begin
+							mantissa = mantissa - nmantissa;
+					end
+					signQ_1[col].enq(sign);
+					mantissaQ_1[col].enq(mantissa);
+		endrule
+		rule sumchannels_2(valid[col] == 1);
+					Vector#(3, MSFPTempFrac) psum = pev[1].first;
+					Bit#(1) sign = signQ_1[col].first;
+					Bit#(17) mantissa = mantissaQ_1[col].first;
+					signQ_1[col].deq; mantissaQ_1[col].deq;
+					Int#(8) expdiff = maxexp-expo[1];
+					Bit#(17) nmantissa = (psum[col].mantissa>>expdiff);
+					if ( psum[col].sign == sign ) begin
+							mantissa = nmantissa + mantissa;
+					end else if ( nmantissa > mantissa ) begin
+							sign = ~sign;
+							mantissa = nmantissa - mantissa;
+					end else begin
+							mantissa = mantissa - nmantissa;
+					end
+					signQ_2[col].enq(sign);
+					mantissaQ_2[col].enq(mantissa);
+		endrule
+		rule sumchannels_3(valid[col] == 1);
+					Vector#(3, MSFPTempFrac) psum = pev[2].first;
+					Bit#(1) sign = signQ_2[col].first;
+					Bit#(17) mantissa = mantissaQ_2[col].first;
+					signQ_2[col].deq; mantissaQ_2[col].deq;
+					Int#(8) expdiff = maxexp-expo[2];
+					Bit#(17) nmantissa = (psum[col].mantissa>>expdiff);
+					if ( psum[col].sign == sign ) begin
+							mantissa = nmantissa + mantissa;
+					end else if ( nmantissa > mantissa ) begin
+							sign = ~sign;
+							mantissa = nmantissa - mantissa;
+					end else begin
+							mantissa = mantissa - nmantissa;
+					end
+					msfp2bf[col].enq(sign, mantissa);
+					valid[col] <= 0;
+		endrule
+	end
+	
+                   
 	rule collectBfloat16;
 		Vector#(3,BFloat16) temps;
 		for ( Integer i = 0; i < 3; i=i+1 ) begin
@@ -133,11 +172,22 @@ module mkBLMacMSFP12_3#(Bit#(53) block1, Bit#(53) block2, Bit#(53) block3) (BLMa
 		sumQ.enq(temps);
 	endrule
 
-	
-	method Action enq(Vector#(3,Vector#(3,Bit#(8))) pixels);
+    Vector#(3, FIFO#(Vector#(3, Bit#(8)))) pixels <- replicateM(mkFIFO);
+
+	rule putPixels;
 		for (Integer i = 0; i < 3; i=i+1 ) begin
-			pev[i].enq(pixels[i]);
+				pev[i].enq(pixels[i].first);
+				pixels[i].deq;
 		end
+	endrule
+
+	method Action enq(Vector#(3,Vector#(3,Bit#(8))) _pixels);
+		pixels[0].enq(_pixels[0]);
+		pixels[1].enq(_pixels[1]);
+		pixels[2].enq(_pixels[2]);
+		// for (Integer i = 0; i < 3; i=i+1 ) begin
+		// 	pev[i].enq(pixels[i]);
+		// end
 	endmethod
 	method Vector#(3,BFloat16) first;
 		return sumQ.first;
@@ -159,40 +209,72 @@ module mkBLMacMSFP12#(Bit#(53) block, Integer channel) (BLMacMSFP12Ifc);
 	Int#(8) expi = 0; // 256 is 1 now
 
 	FIFO#(Vector#(3,MSFPTempFrac)) psumQ <- mkFIFO;
-	
-	method Action enq(Vector#(3,Bit#(8)) pixels);
+	Vector#(2, FIFO#(Vector#(3,Bit#(17)))) psumForward <- replicateM(mkFIFO);
+	Vector#(2, FIFO#(Vector#(3,Bit#(1)))) psignForward <- replicateM(mkFIFO);
+	FIFO#(Vector#(3, Bit#(8))) pixelsQ <- mkFIFO;
+	Vector#(2, FIFO#(Bit#(1))) valid <- replicateM(mkFIFO);
 
-		if ( exponent < expi + 8 && exponent + 8 > expi ) begin
-			if ( exponent > expi ) begin
-				Int#(8) ediff = exponent-expi;
-				for ( Integer i = 0; i < 3; i=i+1 ) begin
-					pixels[i] = pixels[i]>>ediff;
+	rule step_calc_b;
+		valid[0].deq;
+		let val = valid[0].first;
+		if (val == 1) begin
+			let pixels = pixelsQ.first;
+			Vector#(3,Bit#(17)) psum = psumForward[0].first;
+			psumForward[0].deq;
+			Vector#(3,Bit#(1)) psign = psignForward[0].first;
+			psignForward[0].deq;
+			for ( Integer j = 0; j < 3; j=j+1 ) begin
+				Bit#(1) sign = fracs[1][j].sign;
+				// FIXME? only compute top 4 bits of pixel
+				Bit#(8) nmantissa = (zeroExtend(fracs[1][j].mantissa)<<4);
+				if ( exponent < expi ) begin
+					Int#(8) ediff = expi-exponent;
+					nmantissa = (nmantissa>>ediff);
 				end
-			end 
-
-			Vector#(3,Bit#(17)) psum = replicate(0);
-			Vector#(3,Bit#(1)) psign = replicate(0);
-			for ( Integer i = 0; i < 3; i=i+1 ) begin
-				for ( Integer j = 0; j < 3; j=j+1 ) begin
-					Bit#(1) sign = fracs[i][j].sign;
-					// FIXME? only compute top 4 bits of pixel
-					Bit#(8) nmantissa = (zeroExtend(fracs[i][j].mantissa)<<4);
-					if ( exponent < expi ) begin
-						Int#(8) ediff = expi-exponent;
-						nmantissa = (nmantissa>>ediff);
-					end
-					Bit#(16) mantissa = zeroExtend(nmantissa) * zeroExtend(pixels[i]); 
-					if ( psign[j] == sign ) begin
-						psum[j] = psum[j] + zeroExtend(mantissa);
-					end else if ( psum[j] > zeroExtend(mantissa) ) begin
-						psum[j] = psum[j] - zeroExtend(mantissa);
-					end else begin
-						psign[j] = ~psign[j];
-						psum[j] = zeroExtend(mantissa) - psum[j];
-					end
+				Bit#(16) mantissa = zeroExtend(nmantissa) * zeroExtend(pixels[1]); 
+				if ( psign[j] == sign ) begin
+					psum[j] = psum[j] + zeroExtend(mantissa);
+				end else if ( psum[j] > zeroExtend(mantissa)) begin
+					psum[j] = psum[j] - zeroExtend(mantissa);
+				end else begin
+					psign[j] = ~psign[j];
+					psum[j] = zeroExtend(mantissa) - psum[j];
 				end
 			end
+			psumForward[1].enq(psum);
+			psignForward[1].enq(psign);
+		end 
+		valid[1].enq(val);
+	endrule
 
+	rule step_calc_c;
+		valid[1].deq;
+		let val =  valid[1].first;
+		if (val == 1) begin
+			let pixels = pixelsQ.first;
+			pixelsQ.deq;
+			Vector#(3,Bit#(17)) psum = psumForward[1].first;
+			psumForward[1].deq;
+			Vector#(3,Bit#(1)) psign = psignForward[1].first;
+			psignForward[1].deq;
+			for ( Integer j = 0; j < 3; j=j+1 ) begin
+				Bit#(1) sign = fracs[2][j].sign;
+				// FIXME? only compute top 4 bits of pixel
+				Bit#(8) nmantissa = (zeroExtend(fracs[2][j].mantissa)<<4);
+				if ( exponent < expi ) begin
+					Int#(8) ediff = expi-exponent;
+					nmantissa = (nmantissa>>ediff);
+				end
+				Bit#(16) mantissa = zeroExtend(nmantissa) * zeroExtend(pixels[2]); 
+				if ( psign[j] == sign ) begin
+					psum[j] = psum[j] + zeroExtend(mantissa);
+				end else if ( psum[j] > zeroExtend(mantissa) ) begin
+					psum[j] = psum[j] - zeroExtend(mantissa);
+				end else begin
+					psign[j] = ~psign[j];
+					psum[j] = zeroExtend(mantissa) - psum[j];
+				end
+			end
 			Vector#(3,MSFPTempFrac) tbf;
 			for ( Integer i = 0; i < 3; i=i+1 ) begin
 				MSFPTempFrac bf = MSFPTempFrac{
@@ -203,8 +285,45 @@ module mkBLMacMSFP12#(Bit#(53) block, Integer channel) (BLMacMSFP12Ifc);
 				//$write( "A: %d>> %d,%d %d %d\n",channel, exponent, expi, psign[i], psum[i] );
 			end
 			psumQ.enq(tbf);
-		end else begin
+		end else begin 
 			psumQ.enq(unpack(0));
+		end
+	endrule
+
+	method Action enq(Vector#(3,Bit#(8)) pixels);
+		if ( exponent < expi + 8 && exponent + 8 > expi ) begin
+			if ( exponent > expi ) begin
+				Int#(8) ediff = exponent-expi;
+				for ( Integer i = 0; i < 3; i=i+1 ) begin
+					pixels[i] = pixels[i]>>ediff;
+				end
+			end 
+			pixelsQ.enq(pixels);
+			Vector#(3,Bit#(17)) psum = replicate(0);
+			Vector#(3,Bit#(1)) psign = replicate(0);
+			for ( Integer j = 0; j < 3; j=j+1 ) begin
+				Bit#(1) sign = fracs[0][j].sign;
+				// FIXME? only compute top 4 bits of pixel
+				Bit#(8) nmantissa = (zeroExtend(fracs[0][j].mantissa)<<4);
+				if ( exponent < expi ) begin
+					Int#(8) ediff = expi-exponent;
+					nmantissa = (nmantissa>>ediff);
+				end
+				Bit#(16) mantissa = zeroExtend(nmantissa) * zeroExtend(pixels[0]); 
+				if ( psign[j] == sign ) begin
+					psum[j] = psum[j] + zeroExtend(mantissa);
+				end else if ( psum[j] > zeroExtend(mantissa) ) begin
+					psum[j] = psum[j] - zeroExtend(mantissa);
+				end else begin
+					psign[j] = ~psign[j];
+					psum[j] = zeroExtend(mantissa) - psum[j];
+				end
+			end
+			psumForward[0].enq(psum);
+			psignForward[0].enq(psign);
+			valid[0].enq(1);
+		end else begin
+			valid[0].enq(0);
 		end
 	endmethod
 	method Vector#(3,MSFPTempFrac) first;
