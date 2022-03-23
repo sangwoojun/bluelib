@@ -90,7 +90,7 @@ module mkBLMacMSFP12_3#(Bit#(53) block1, Bit#(53) block2, Bit#(53) block3) (BLMa
 	
 	FIFO#(Vector#(3,BFloat16)) sumQ <- mkFIFO;
 
-	Vector#(3,BLMSFPtoBFloat16Ifc) msfp2bf <- replicateM(mkMSFPtoBFloat16(pack(maxexp)+127+3));  // shifting by 4 to adjust for mantissa shift in mkBLMacMSFP12
+	Vector#(3,BLMSFPtoBFloat16Ifc) msfp2bf <- replicateM(mkMSFPtoBFloat16(pack(maxexp)+127+4));  // shifting by 4 to adjust for mantissa shift in mkBLMacMSFP12
 
 	rule sumchannels;
 		Vector#(3,Vector#(3, MSFPTempFrac)) psum;
@@ -104,12 +104,12 @@ module mkBLMacMSFP12_3#(Bit#(53) block1, Bit#(53) block2, Bit#(53) block3) (BLMa
 			//Int#(8) expdiff0 = maxexp-expo[0];
 			//Bit#(5) mantissa = zeroExtend(psum[0][col].mantissa>>expdiff0);
 			Bit#(1) sign = 0;
-			Bit#(18) mantissa = 0;
+			Bit#(19) mantissa = 0;
 
 			for ( Integer i = 0; i < 3; i=i+1 ) begin
 				Int#(8) expdiff = maxexp-expo[i];
 				Bit#(17) nmantissa = (psum[i][col].mantissa>>expdiff);
-				$write("%d,%d>> %d %d\n", i,col, psum[i][col].mantissa, expdiff);
+				//$write("%d,%d>> %d %d\n", i,col, psum[i][col].mantissa, expdiff);
 
 				if ( psum[i][col].sign == sign ) begin
 					mantissa = zeroExtend(nmantissa) + mantissa;
@@ -121,7 +121,7 @@ module mkBLMacMSFP12_3#(Bit#(53) block1, Bit#(53) block2, Bit#(53) block3) (BLMa
 				end
 			end
 			msfp2bf[col].enq(sign, truncateLSB(mantissa));
-			$write("%d>> %d %d\n", col, sign, mantissa);
+			//$write("%d>> %d %d\n", col, sign, mantissa);
 		end
 	endrule
 
