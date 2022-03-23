@@ -31,6 +31,7 @@ module mkBLRadixSub#(Integer bucketOff) (BLRadixIfc#(lenSz,waysSz,tupleCnt,dtype
 		Add#(a__, subBitLen, dsz),
 		Add#(b__, waysSz, subBitLen),
 		Add#(1, c__, TMul#(tupleCnt, dsz)),
+		Eq#(dtype),
 		Bits#(dtype,dsz)
 	);
 	Reg#(Bool) flushing <- mkReg(False);
@@ -59,14 +60,18 @@ module mkBLRadixSub#(Integer bucketOff) (BLRadixIfc#(lenSz,waysSz,tupleCnt,dtype
 			let v = inputQ.first;
 			serialInputQ.enq(v[0]);
 
-			serializerCnt <= fromInteger(iTupleCnt-1);
+			//if (!(v[0] == v[1] && v[1] == v[2] && v[2] == v[3] )) begin
 			Vector#(TSub#(tupleCnt,1), dtype) nb;
+
+			Bit#(TLog#(tupleCnt)) diffcnt = 0;
+
 			for ( Integer i = 0; i < fromInteger(iTupleCnt-1); i=i+1) begin
 				nb[i] = v[i+1];
+				if ( v[i+1] != v[0] ) diffcnt = diffcnt + 1;
 			end
 			serializerBuffer <= nb;
-
-
+			serializerCnt <= diffcnt;
+			//end
 		end else begin
 			serializerCnt <= serializerCnt -1;
 			serialInputQ.enq(serializerBuffer[0]);
@@ -83,13 +88,15 @@ module mkBLRadixSub#(Integer bucketOff) (BLRadixIfc#(lenSz,waysSz,tupleCnt,dtype
 	endrule
 
 	FIFO#(Tuple2#(Bit#(waysSz),dtype)) serialFilterQ <- mkFIFO;
+	Reg#(dtype) lastVal <- mkReg(unpack(-1));
 	rule filterInput;
 		serialInputQ.deq;
 		let d = serialInputQ.first;
 		Bit#(subBitLen) bucket = truncate(pack(d)>>valueOf(subBitOff));
-		if ( bucket >= fromInteger(bucketOff) && bucket <= fromInteger(bucketOff+valueOf(TExp#(waysSz))-1)) begin
+		if ( d != lastVal && bucket >= fromInteger(bucketOff) && bucket <= fromInteger(bucketOff+valueOf(TExp#(waysSz))-1)) begin
 			let subbucket = bucket - fromInteger(bucketOff);
 			serialFilterQ.enq(tuple2(truncate(subbucket),d));
+			lastVal <= d;
 		end
 		else begin
 			//$write( "bucket %d filtered out\n", bucket );
@@ -251,6 +258,7 @@ module mkBLRadix (BLRadixIfc#(lenSz,subWaysSz,tupleCnt,dtype,subBitOff,subBitLen
 		Add#(burstSz,1,lenSz),
 		Add#(a__, subBitLen, dsz),
 		Add#(b__, subWaysSz, subBitLen),
+		Eq#(dtype),
 		Bits#(dtype,dsz)
 	);
 	Reg#(Bit#(32)) cycleCounter <- mkReg(0);
