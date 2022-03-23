@@ -90,7 +90,7 @@ module mkBLMacMSFP12_3#(Bit#(53) block1, Bit#(53) block2, Bit#(53) block3) (BLMa
 	
 	FIFO#(Vector#(3,BFloat16)) sumQ <- mkFIFO;
 
-	Vector#(3,BLMSFPtoBFloat16Ifc) msfp2bf <- replicateM(mkMSFPtoBFloat16(pack(maxexp)+127+4));  // shifting by 4 to adjust for mantissa shift in mkBLMacMSFP12
+	Vector#(3,BLMSFPtoBFloat16Ifc) msfp2bf <- replicateM(mkMSFPtoBFloat16(pack(maxexp)+127+3));  // shifting by 4 to adjust for mantissa shift in mkBLMacMSFP12
 
 	rule sumchannels;
 		Vector#(3,Vector#(3, MSFPTempFrac)) psum;
@@ -104,23 +104,24 @@ module mkBLMacMSFP12_3#(Bit#(53) block1, Bit#(53) block2, Bit#(53) block3) (BLMa
 			//Int#(8) expdiff0 = maxexp-expo[0];
 			//Bit#(5) mantissa = zeroExtend(psum[0][col].mantissa>>expdiff0);
 			Bit#(1) sign = 0;
-			Bit#(17) mantissa = 0;
+			Bit#(18) mantissa = 0;
 
 			for ( Integer i = 0; i < 3; i=i+1 ) begin
 				Int#(8) expdiff = maxexp-expo[i];
 				Bit#(17) nmantissa = (psum[i][col].mantissa>>expdiff);
-				//$write("%d,%d>> %d %d\n", i,col, psum[i][col].mantissa, expdiff);
+				$write("%d,%d>> %d %d\n", i,col, psum[i][col].mantissa, expdiff);
 
 				if ( psum[i][col].sign == sign ) begin
-					mantissa = nmantissa + mantissa;
-				end else if ( nmantissa > mantissa ) begin
+					mantissa = zeroExtend(nmantissa) + mantissa;
+				end else if ( zeroExtend(nmantissa) > mantissa ) begin
 					sign = ~sign;
-					mantissa = nmantissa - mantissa;
+					mantissa = zeroExtend(nmantissa) - mantissa;
 				end else begin
-					mantissa = mantissa - nmantissa;
+					mantissa = mantissa - zeroExtend(nmantissa);
 				end
 			end
-			msfp2bf[col].enq(sign, mantissa);
+			msfp2bf[col].enq(sign, truncateLSB(mantissa));
+			$write("%d>> %d %d\n", col, sign, mantissa);
 		end
 	endrule
 
@@ -154,7 +155,7 @@ interface BLMacMSFP12Ifc;
 endinterface
 module mkBLMacMSFP12#(Bit#(53) block, Integer channel) (BLMacMSFP12Ifc);
 
-	Int#(8) exponent = unpack(block[7:0]-126);
+	Int#(8) exponent = unpack(block[7:0]-127);
 	Vector#(3,Vector#(3,MSFP12Frac)) fracs = unpack(truncate(block>>8));
 	Int#(8) expi = 0; // 256 is 1 now
 
@@ -182,6 +183,7 @@ module mkBLMacMSFP12#(Bit#(53) block, Integer channel) (BLMacMSFP12Ifc);
 						nmantissa = (nmantissa>>ediff);
 					end
 					Bit#(16) mantissa = zeroExtend(nmantissa) * zeroExtend(pixels[i]); 
+					//$write( "%d %d -> %d\n", nmantissa, pixels[i] ,mantissa );
 					if ( psign[j] == sign ) begin
 						psum[j] = psum[j] + zeroExtend(mantissa);
 					end else if ( psum[j] > zeroExtend(mantissa) ) begin

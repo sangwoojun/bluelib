@@ -7,7 +7,12 @@ import "BDPI" function Action bdpi_writeoutput(Bit#(64) data);
 module mkSimTop(Empty);
 	Reg#(Bit#(32)) inputCounter <- mkReg(0);
 	//BLMacMSFP12Ifc pe <- mkBLMacMSFP12(53'h01abcb223c54a7d);
-	BLMacMSFP12_3ChannelIfc pe <- mkBLMacMSFP12_3(53'h01abcb223c54a7d, 53'h01eccb634c5ae7d, 53'h01dc674c46d8c7a);
+	//BLMacMSFP12_3ChannelIfc pe <- mkBLMacMSFP12_3(53'h01abcb223c54a7d, 53'h01eccb634c5ae7d, 53'h01dc674c46d8c7a);
+
+
+	// all ones
+	BLMacMSFP12_3ChannelIfc pe <- mkBLMacMSFP12_3(53'h00842108421087f, 53'h00842108421087f, 53'h00842108421087f);
+
 	rule insertInput(inputCounter < 1 );
 		inputCounter <= inputCounter + 1;
 
@@ -23,13 +28,17 @@ module mkSimTop(Empty);
 		channels[2] = channel3;
 		pe.enq(channels);
 	endrule
+
+	Reg#(Bit#(32)) cycleCounter <- mkReg(0);
+	rule incCycle;
+		cycleCounter <= cycleCounter+1;
+	endrule
+
 	rule getOutput;
 		let d = pe.first;
 		pe.deq;
 		bdpi_writeoutput(zeroExtend(pack(d)));
+		$write( "Cycle: %d\n", cycleCounter );
 	endrule
 
-
-//53'h00d6b5ad6b5ad7d
-//53'h01bdef7bdef7b7a
 endmodule

@@ -4,6 +4,25 @@
 #include <stdio.h>
 #include <time.h>
 
+
+
+float channel1[9] = {
+1,1,1,1,1,1,1,1,1
+};
+//53'h01abcb223c54a7d
+//125 -> -2
+float channel2[9] = {
+1,1,1,1,1,1,1,1,1
+};
+//53'h01eccb634c5ae7d
+//125 -> -2
+float channel3[9] = {
+1,1,1,1,1,1,1,1,1
+};
+//53'h01dc674c46d8c7a
+//122 -> -5
+
+/*
 float channel1[9] = {
 0.341195,
 0.339992,
@@ -43,8 +62,23 @@ float channel3[9] = {
 };
 //53'h01dc674c46d8c7a
 //122 -> -5
+*/
 
+uint8_t testinput[9] = {
+	255,
+	255,
+	255,
 
+	255,
+	255,
+	255,
+	
+	255,
+	255,
+	255
+};
+
+/*
 uint8_t testinput[9] = {
 	5,
 	250,
@@ -58,6 +92,7 @@ uint8_t testinput[9] = {
 	1,
 	82
 };
+*/
 
 extern "C" uint32_t bdpi_readinput(uint32_t addr, uint32_t offset) {
 	return (testinput[2+offset]<<16)|(testinput[1+offset]<<8)|testinput[0+offset];
@@ -75,17 +110,6 @@ extern "C" void bdpi_writeoutput(uint64_t data) { // 3 bfloat16
 			}
 		}
 	}
-	/*
-	float a0 = t0*channel1[0] + t1*channel1[3] + t2*channel1[6];
-	float a1 = t0*channel1[1] + t1*channel1[4] + t2*channel1[7];
-	float a2 = t0*channel1[2] + t1*channel1[5] + t2*channel1[8];
-	float b0 = t0*channel2[0] + t1*channel2[3] + t2*channel2[6];
-	float b1 = t0*channel2[1] + t1*channel2[4] + t2*channel2[7];
-	float b2 = t0*channel2[2] + t1*channel2[5] + t2*channel2[8];
-	float c0 = t0*channel3[0] + t1*channel3[3] + t2*channel3[6];
-	float c1 = t0*channel3[1] + t1*channel3[4] + t2*channel3[7];
-	float c2 = t0*channel3[2] + t1*channel3[5] + t2*channel3[8];
-*/
 
 	uint32_t da[3] = {0};
 	uint32_t d0 = data&0xffff;
