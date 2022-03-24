@@ -16,7 +16,7 @@ typedef struct {
 
 typedef struct {
 	Bit#(1) sign;
-	Bit#(17) mantissa;
+	Bit#(15) mantissa; // 7 bits for bfloat16, 7 bits for potential shifting for alignment, one bit for MSB
 } MSFPTempFrac deriving(Eq,Bits);
 
 interface BLMacMSFP12_3ChannelIfc;
@@ -26,13 +26,13 @@ interface BLMacMSFP12_3ChannelIfc;
 endinterface
 
 interface BLMSFPtoBFloat16Ifc;
-	method Action enq(Bit#(1) sign, Bit#(17) mantissa_e);
+	method Action enq(Bit#(1) sign, Bit#(15) mantissa_e);
 	method BFloat16 first;
 	method Action deq;
 endinterface
 
 module mkMSFPtoBFloat16#(Bit#(8) expn_) (BLMSFPtoBFloat16Ifc);
-	FIFO#(Tuple2#(Bit#(1), Bit#(17))) inQ <- mkFIFO;
+	FIFO#(Tuple2#(Bit#(1), Bit#(15))) inQ <- mkFIFO;
 	FIFO#(BFloat16) outQ <- mkFIFO;
 	rule doTranslate;
 		inQ.deq;
@@ -40,11 +40,11 @@ module mkMSFPtoBFloat16#(Bit#(8) expn_) (BLMSFPtoBFloat16Ifc);
 
 		Bit#(8) expn = expn_;
 		Bit#(1) sign = tpl_1(in);
-		Bit#(17) mantissa = tpl_2(in);
+		Bit#(15) mantissa = tpl_2(in);
 
 		Bool done = False;
 		for ( Integer i = 0; i < 7; i=i+1 ) begin
-			if ( !done && mantissa[16] != 1 ) begin
+			if ( !done && mantissa[14] != 1 ) begin
 				mantissa = (mantissa << 1);
 				expn = expn -1;
 			end else begin
@@ -54,11 +54,11 @@ module mkMSFPtoBFloat16#(Bit#(8) expn_) (BLMSFPtoBFloat16Ifc);
 
 		outQ.enq(BFloat16{
 			sign: sign,
-			mantissa: mantissa[15:9], // remove MSB 1
+			mantissa: mantissa[13:7], // remove MSB 1
 			exponent: expn - 1 // remove MSB 1
 		});
 	endrule
-	method Action enq(Bit#(1) sign, Bit#(17) mantissa_e);
+	method Action enq(Bit#(1) sign, Bit#(15) mantissa_e);
 		inQ.enq(tuple2(sign,mantissa_e));
 	endmethod
 	method BFloat16 first;
@@ -104,11 +104,11 @@ module mkBLMacMSFP12_3#(Bit#(53) block1, Bit#(53) block2, Bit#(53) block3) (BLMa
 			//Int#(8) expdiff0 = maxexp-expo[0];
 			//Bit#(5) mantissa = zeroExtend(psum[0][col].mantissa>>expdiff0);
 			Bit#(1) sign = 0;
-			Bit#(19) mantissa = 0;
+			Bit#(17) mantissa = 0;
 
 			for ( Integer i = 0; i < 3; i=i+1 ) begin
 				Int#(8) expdiff = maxexp-expo[i];
-				Bit#(17) nmantissa = (psum[i][col].mantissa>>expdiff);
+				Bit#(15) nmantissa = (psum[i][col].mantissa>>expdiff);
 				//$write("%d,%d>> %d %d\n", i,col, psum[i][col].mantissa, expdiff);
 
 				if ( psum[i][col].sign == sign ) begin
@@ -182,7 +182,7 @@ module mkBLMacMSFP12#(Bit#(53) block, Integer channel) (BLMacMSFP12Ifc);
 						Int#(8) ediff = expi-exponent;
 						nmantissa = (nmantissa>>ediff);
 					end
-					Bit#(16) mantissa = zeroExtend(nmantissa) * zeroExtend(pixels[i]); 
+					Bit#(16) mantissa = (zeroExtend(nmantissa) * zeroExtend(pixels[i])); 
 					//$write( "%d %d -> %d\n", nmantissa, pixels[i] ,mantissa );
 					if ( psign[j] == sign ) begin
 						psum[j] = psum[j] + zeroExtend(mantissa);
@@ -199,7 +199,7 @@ module mkBLMacMSFP12#(Bit#(53) block, Integer channel) (BLMacMSFP12Ifc);
 			for ( Integer i = 0; i < 3; i=i+1 ) begin
 				MSFPTempFrac bf = MSFPTempFrac{
 					sign: psign[i],
-					mantissa:psum[i]
+					mantissa:truncateLSB(psum[i])
 				};
 				tbf[i] = bf;
 				//$write( "A: %d>> %d,%d %d %d\n",channel, exponent, expi, psign[i], psum[i] );
