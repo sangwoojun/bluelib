@@ -86,25 +86,38 @@ module mkHashFunctionMurmur3_32#(Bit#(32) seed) (HashFunction32Ifc#(dtype))
 
 	FIFO#(Bit#(32)) out1Q <- mkFIFO;
 	FIFO#(Bit#(32)) out2Q <- mkFIFO;
+	FIFO#(Bit#(32)) out3Q <- mkFIFO;
+	FIFO#(Bit#(32)) out4Q <- mkFIFO;
 	FIFO#(Bit#(32)) outQ <- mkFIFO;
 	rule scramble1;
 		let h = midQ.first;
 		midQ.deq;
 
 		h = h ^ (h>>16);
-		h = h * 32'h85ebca6b;
 		out1Q.enq(h);
 	endrule
 	rule scramble2;
 		let h = out1Q.first;
 		out1Q.deq;
-		h = h ^ (h>>13);
-		h = h * 32'hc2b2ae35;
+		h = h * 32'h85ebca6b;
 		out2Q.enq(h);
 	endrule
 	rule scramble3;
 		let h = out2Q.first;
 		out2Q.deq;
+		h = h ^ (h>>13);
+		out3Q.enq(h);
+	endrule
+	rule scramble4;
+		let h = out3Q.first;
+		out3Q.deq;
+	
+		h = h * 32'hc2b2ae35;
+		out4Q.enq(h);
+	endrule
+	rule scramble5;
+		let h = out4Q.first;
+		out4Q.deq;
 		h = h ^ (h>>16);
 		outQ.enq(h);
 	endrule
